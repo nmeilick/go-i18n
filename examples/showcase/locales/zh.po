@@ -1,0 +1,238 @@
+msgid ""
+msgstr "Language: zh\nPlural-Forms: nplurals=1; plural=0;\n"
+
+#: main.go:261
+#, go-i18n-brace-format
+msgid "API payload"
+msgstr "API 负载"
+
+#: main.go:202
+#, go-i18n-brace-format
+msgid "Billing domain is active"
+msgstr "账单域已启用"
+
+#: main.go:223
+#, go-i18n-brace-format
+msgid "Catalogs"
+msgstr "目录"
+
+#: main.go:196
+#, go-i18n-brace-format
+msgid "Context"
+msgstr "上下文"
+
+#: main.go:204
+#, go-i18n-brace-format
+msgid "Default domain is active"
+msgstr "默认域已启用"
+
+#: main.go:281
+#, go-i18n-brace-format
+msgid "Diagnostics"
+msgstr "诊断"
+
+#. Placeholder {currency}: value.
+#: main.go:239
+#, go-i18n-brace-format
+msgid "Display currency: {currency}"
+msgstr "显示货币：{currency}"
+
+#: main.go:230
+#, go-i18n-brace-format
+msgid "Distance: {n} kilometer"
+msgid_plural "Distance: {n} kilometers"
+msgstr[0] "距离：{n} 公里"
+
+#: main.go:201 main.go:204
+#, go-i18n-brace-format
+msgid "Domain"
+msgstr "域"
+
+#: main.go:358
+#, go-i18n-brace-format
+msgid "Email is required"
+msgstr "电子邮件为必填项"
+
+#. Placeholder {diagnostics}: value.
+#: main.go:477
+#, go-i18n-brace-format
+msgid "Formatter diagnostics: {diagnostics}"
+msgstr "格式化诊断：{diagnostics}"
+
+#: main.go:210 main.go:225
+#, go-i18n-brace-format
+msgid "Formatting"
+msgstr "格式化"
+
+#. Placeholder {region}: value.
+#: main.go:241
+#, go-i18n-brace-format
+msgid "Formatting region: {region}"
+msgstr "格式化地区：{region}"
+
+#: main.go:174
+#, go-i18n-brace-format
+msgid "Go i18n showcase"
+msgstr "Go i18n 展示"
+
+#: main.go:188 main.go:276
+#, go-i18n-brace-format
+msgid "Greeting"
+msgstr "问候"
+
+#. Placeholder {name}: value.
+#: main.go:188 main.go:395
+#, go-i18n-brace-format
+msgid "Hello {name}"
+msgstr "你好，{name}"
+
+#. Placeholder {number}: value.
+#. Domain: billing
+#: main.go:201
+#, go-i18n-brace-format
+msgid "Invoice {number}"
+msgstr "发票 {number}"
+
+#: main.go:176
+#, go-i18n-brace-format
+msgid "Language"
+msgstr "语言"
+
+#: main.go:247
+#, go-i18n-brace-format
+msgid "Locale text"
+msgstr "本地化文本"
+
+#. Placeholder {status}: value.
+#: main.go:286
+#, go-i18n-brace-format
+msgid "Missing lookup status: {status}"
+msgstr "缺失查找状态：{status}"
+
+#: main.go:458
+#, go-i18n-brace-format
+msgid "No formatter diagnostics"
+msgstr "没有格式化诊断"
+
+#: main.go:192
+#, go-i18n-brace-format
+msgid "Plural"
+msgstr "复数"
+
+#. Placeholder {language}: value.
+#: main.go:238
+#, go-i18n-brace-format
+msgid "Profile language: {language}"
+msgstr "配置语言：{language}"
+
+#: main.go:224
+#, go-i18n-brace-format
+msgid "Profiles"
+msgstr "配置"
+
+#. Placeholder {percent}: value.
+#: main.go:221
+#, go-i18n-brace-format
+msgid "Progress: {percent}"
+msgstr "进度：{percent}"
+
+#. Placeholder {interval}: value.
+#: main.go:231
+#, go-i18n-brace-format
+msgid "Refresh interval: {interval}"
+msgstr "刷新间隔：{interval}"
+
+#: main.go:237
+#, go-i18n-brace-format
+msgid "Resolver profile"
+msgstr "解析后的配置"
+
+#: main.go:151
+#, go-i18n-brace-format
+msgid "Run lingo check from this directory to validate the example catalogs."
+msgstr "使用示例配置运行 lingo check 以验证示例目录。"
+
+#: main.go:185
+#, go-i18n-brace-format
+msgid "Runtime"
+msgstr "运行时"
+
+#. Placeholder {first}: value.
+#. Placeholder {second}: value.
+#. Placeholder {third}: value.
+#: main.go:252
+#, go-i18n-brace-format
+msgid "Sorted words: {first}, {second}, and {third}"
+msgstr "排序后的词：{first}、{second}、{third}"
+
+#. Placeholder {timezone}: value.
+#: main.go:240
+#, go-i18n-brace-format
+msgid "Timezone: {timezone}"
+msgstr "时区：{timezone}"
+
+#: main.go:215
+#, go-i18n-brace-format
+msgid "Total {amount} due {date}"
+msgstr "总计 {amount}，到期日 {date}"
+
+#. Placeholder {command}: value.
+#: main.go:179
+#, go-i18n-brace-format
+msgid "Unknown command: {command}"
+msgstr "未知命令：{command}"
+
+#: main.go:177
+#, go-i18n-brace-format
+msgid "Use 1-6 or a locale code to switch language. n/p changes the count, d toggles the domain, q quits."
+msgstr "使用 1-6 或语言代码切换语言。n/p 更改数量，d 切换域，q 退出。"
+
+#. Placeholder {catalogs}: value.
+#. Placeholder {formatting}: value.
+#. Placeholder {profiles}: value.
+#: main.go:222
+#, go-i18n-brace-format
+msgid "Visible sections: {catalogs}, {profiles}, and {formatting}"
+msgstr "可见部分：{catalogs}、{profiles}、{formatting}"
+
+#: main.go:267
+#, go-i18n-brace-format
+msgid "Web adapter"
+msgstr "Web 适配器"
+
+#. Placeholder {hours}: value.
+#. Placeholder {minutes}: value.
+#: main.go:424
+#, go-i18n-brace-format
+msgid "{hours} and {minutes}"
+msgstr "{hours}{minutes}"
+
+#: main.go:425 main.go:430
+#, go-i18n-brace-format
+msgid "{n} hour"
+msgid_plural "{n} hours"
+msgstr[0] "{n} 小时"
+
+#: main.go:426 main.go:432
+#, go-i18n-brace-format
+msgid "{n} minute"
+msgid_plural "{n} minutes"
+msgstr[0] "{n} 分钟"
+
+#: main.go:192
+#, go-i18n-brace-format
+msgid "{n} task"
+msgid_plural "{n} tasks"
+msgstr[0] "{n} 个任务"
+
+#: main.go:196
+#, go-i18n-brace-format
+msgctxt "button"
+msgid "Open"
+msgstr "打开"
+
+#: main.go:196
+#, go-i18n-brace-format
+msgctxt "status"
+msgid "Open"
+msgstr "开放"

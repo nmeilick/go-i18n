@@ -1,0 +1,27 @@
+version = 1
+
+[extract]
+roots = ['.']
+keywords = [
+  'T:msg=1,vars=2',
+  'Tn:count=1,msg=2,plural=3,vars=4',
+  'Tc:ctx=1,msg=2,vars=3',
+  'Tnc:ctx=1,count=2,msg=3,plural=4,vars=5',
+  "billingT:domain='billing',msg=2,vars=3",
+  'catalogText:msg=1',
+]
+
+[catalogs]
+template = 'locales/messages.pot'
+locale_dir = 'locales'
+locales = ['en', 'de', 'fr', 'es', 'zh', 'ar']
+
+[[data.bundles]]
+name = 'showcase'
+mode = 'embedded-pack'
+output = 'internal/showcasecldr/bundle.go'
+package = 'showcasecldr'
+codec = 'zstd'
+languages = ['en', 'de', 'fr', 'es', 'zh', 'ar']
+features = ['auto']
+scan_roots = ['.']

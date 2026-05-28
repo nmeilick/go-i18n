@@ -1,0 +1,32 @@
+msgid ""
+msgstr ""
+"Language: de\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Hello {name}"
+msgstr "Hallo {name}"
+
+msgid "Order {number}"
+msgstr "Bestellung {number}"
+
+msgid "Checkout total: {amount}"
+msgstr "Summe: {amount}"
+
+msgid "Delivery date: {date}"
+msgstr "Lieferdatum: {date}"
+
+msgid "One item ready"
+msgid_plural "{n} items ready"
+msgstr[0] "Ein Artikel bereit"
+msgstr[1] "{n} Artikel bereit"
+
+msgctxt "button"
+msgid "Pay now"
+msgstr "Jetzt bezahlen"
+
+msgctxt "status"
+msgid "Pay now"
+msgstr "Zahlung ausstehend"
+
+msgid "Email is required"
+msgstr "E-Mail ist erforderlich"

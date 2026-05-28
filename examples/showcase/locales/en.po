@@ -1,0 +1,242 @@
+msgid ""
+msgstr "Language: en\nPlural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: main.go:261
+#, go-i18n-brace-format
+msgid "API payload"
+msgstr "API payload"
+
+#: main.go:202
+#, go-i18n-brace-format
+msgid "Billing domain is active"
+msgstr "Billing domain is active"
+
+#: main.go:223
+#, go-i18n-brace-format
+msgid "Catalogs"
+msgstr "Catalogs"
+
+#: main.go:196
+#, go-i18n-brace-format
+msgid "Context"
+msgstr "Context"
+
+#: main.go:204
+#, go-i18n-brace-format
+msgid "Default domain is active"
+msgstr "Default domain is active"
+
+#: main.go:281
+#, go-i18n-brace-format
+msgid "Diagnostics"
+msgstr "Diagnostics"
+
+#. Placeholder {currency}: value.
+#: main.go:239
+#, go-i18n-brace-format
+msgid "Display currency: {currency}"
+msgstr "Display currency: {currency}"
+
+#: main.go:230
+#, go-i18n-brace-format
+msgid "Distance: {n} kilometer"
+msgid_plural "Distance: {n} kilometers"
+msgstr[0] "Distance: {n} kilometer"
+msgstr[1] "Distance: {n} kilometers"
+
+#: main.go:201 main.go:204
+#, go-i18n-brace-format
+msgid "Domain"
+msgstr "Domain"
+
+#: main.go:358
+#, go-i18n-brace-format
+msgid "Email is required"
+msgstr "Email is required"
+
+#. Placeholder {diagnostics}: value.
+#: main.go:477
+#, go-i18n-brace-format
+msgid "Formatter diagnostics: {diagnostics}"
+msgstr "Formatter diagnostics: {diagnostics}"
+
+#: main.go:210 main.go:225
+#, go-i18n-brace-format
+msgid "Formatting"
+msgstr "Formatting"
+
+#. Placeholder {region}: value.
+#: main.go:241
+#, go-i18n-brace-format
+msgid "Formatting region: {region}"
+msgstr "Formatting region: {region}"
+
+#: main.go:174
+#, go-i18n-brace-format
+msgid "Go i18n showcase"
+msgstr "Go i18n showcase"
+
+#: main.go:188 main.go:276
+#, go-i18n-brace-format
+msgid "Greeting"
+msgstr "Greeting"
+
+#. Placeholder {name}: value.
+#: main.go:188 main.go:395
+#, go-i18n-brace-format
+msgid "Hello {name}"
+msgstr "Hello {name}"
+
+#. Placeholder {number}: value.
+#. Domain: billing
+#: main.go:201
+#, go-i18n-brace-format
+msgid "Invoice {number}"
+msgstr "Invoice {number}"
+
+#: main.go:176
+#, go-i18n-brace-format
+msgid "Language"
+msgstr "Language"
+
+#: main.go:247
+#, go-i18n-brace-format
+msgid "Locale text"
+msgstr "Locale text"
+
+#. Placeholder {status}: value.
+#: main.go:286
+#, go-i18n-brace-format
+msgid "Missing lookup status: {status}"
+msgstr "Missing lookup status: {status}"
+
+#: main.go:458
+#, go-i18n-brace-format
+msgid "No formatter diagnostics"
+msgstr "No formatter diagnostics"
+
+#: main.go:192
+#, go-i18n-brace-format
+msgid "Plural"
+msgstr "Plural"
+
+#. Placeholder {language}: value.
+#: main.go:238
+#, go-i18n-brace-format
+msgid "Profile language: {language}"
+msgstr "Profile language: {language}"
+
+#: main.go:224
+#, go-i18n-brace-format
+msgid "Profiles"
+msgstr "Profiles"
+
+#. Placeholder {percent}: value.
+#: main.go:221
+#, go-i18n-brace-format
+msgid "Progress: {percent}"
+msgstr "Progress: {percent}"
+
+#. Placeholder {interval}: value.
+#: main.go:231
+#, go-i18n-brace-format
+msgid "Refresh interval: {interval}"
+msgstr "Refresh interval: {interval}"
+
+#: main.go:237
+#, go-i18n-brace-format
+msgid "Resolver profile"
+msgstr "Resolver profile"
+
+#: main.go:151
+#, go-i18n-brace-format
+msgid "Run lingo check from this directory to validate the example catalogs."
+msgstr "Run lingo check with the example config to validate the example catalogs."
+
+#: main.go:185
+#, go-i18n-brace-format
+msgid "Runtime"
+msgstr "Runtime"
+
+#. Placeholder {first}: value.
+#. Placeholder {second}: value.
+#. Placeholder {third}: value.
+#: main.go:252
+#, go-i18n-brace-format
+msgid "Sorted words: {first}, {second}, and {third}"
+msgstr "Sorted words: {first}, {second}, and {third}"
+
+#. Placeholder {timezone}: value.
+#: main.go:240
+#, go-i18n-brace-format
+msgid "Timezone: {timezone}"
+msgstr "Timezone: {timezone}"
+
+#: main.go:215
+#, go-i18n-brace-format
+msgid "Total {amount} due {date}"
+msgstr "Total {amount} due {date}"
+
+#. Placeholder {command}: value.
+#: main.go:179
+#, go-i18n-brace-format
+msgid "Unknown command: {command}"
+msgstr "Unknown command: {command}"
+
+#: main.go:177
+#, go-i18n-brace-format
+msgid "Use 1-6 or a locale code to switch language. n/p changes the count, d toggles the domain, q quits."
+msgstr "Use 1-6 or a locale code to switch language. n/p changes the count, d toggles the domain, q quits."
+
+#. Placeholder {catalogs}: value.
+#. Placeholder {formatting}: value.
+#. Placeholder {profiles}: value.
+#: main.go:222
+#, go-i18n-brace-format
+msgid "Visible sections: {catalogs}, {profiles}, and {formatting}"
+msgstr "Visible sections: {catalogs}, {profiles}, and {formatting}"
+
+#: main.go:267
+#, go-i18n-brace-format
+msgid "Web adapter"
+msgstr "Web adapter"
+
+#. Placeholder {hours}: value.
+#. Placeholder {minutes}: value.
+#: main.go:424
+#, go-i18n-brace-format
+msgid "{hours} and {minutes}"
+msgstr "{hours} and {minutes}"
+
+#: main.go:425 main.go:430
+#, go-i18n-brace-format
+msgid "{n} hour"
+msgid_plural "{n} hours"
+msgstr[0] "{n} hour"
+msgstr[1] "{n} hours"
+
+#: main.go:426 main.go:432
+#, go-i18n-brace-format
+msgid "{n} minute"
+msgid_plural "{n} minutes"
+msgstr[0] "{n} minute"
+msgstr[1] "{n} minutes"
+
+#: main.go:192
+#, go-i18n-brace-format
+msgid "{n} task"
+msgid_plural "{n} tasks"
+msgstr[0] "{n} task"
+msgstr[1] "{n} tasks"
+
+#: main.go:196
+#, go-i18n-brace-format
+msgctxt "button"
+msgid "Open"
+msgstr "Open"
+
+#: main.go:196
+#, go-i18n-brace-format
+msgctxt "status"
+msgid "Open"
+msgstr "Open"

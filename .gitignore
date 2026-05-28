@@ -1,0 +1,15 @@
+bin/
+dist/
+coverage.out
+coverage.html
+*.coverprofile
+*.test
+*.log
+*.tmp
+tmp/
+.lingo-cldr-*/
+cldr-size-report.*
+assets/cldr-json-*/
+.DS_Store
+.idea/
+.vscode/
