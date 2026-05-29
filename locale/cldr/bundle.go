@@ -104,8 +104,8 @@ func (b *staticBundle) Close() error {
 	return b.err
 }
 
-// BuiltinLean returns the generated lean all-locale CLDR bundle.
-func BuiltinLean() Bundle {
+// Builtin returns the generated all-locale CLDR core bundle.
+func Builtin() Bundle {
 	provider := fromInternalProvider{p: cldrdata.Default()}
 	b, err := NewBundle(builtinInfo(provider), builtinCoverage(provider), provider, nil)
 	if err != nil {
@@ -117,8 +117,8 @@ func BuiltinLean() Bundle {
 func builtinInfo(provider DataProvider) Info {
 	meta := provider.Metadata()
 	return Info{
-		ID:   "builtin-lean",
-		Name: "Built-in lean CLDR bundle",
+		ID:   "builtin-core",
+		Name: "Built-in CLDR core bundle",
 		Mode: "native-go",
 		Versions: Versions{
 			CLDR:                 meta.CLDRVersion,
@@ -133,13 +133,13 @@ func builtinInfo(provider DataProvider) Info {
 			SourceDigest:         meta.TreeDigest,
 			License:              meta.License,
 		},
-		Features: leanFeatures(),
+		Features: coreFeatures(),
 		Locales:  provider.AvailableLocales(),
 		Digest:   meta.TreeDigest,
 	}
 }
 
-func leanFeatures() []FeatureID {
+func coreFeatures() []FeatureID {
 	return []FeatureID{
 		FeatureCoreIdentity,
 		FeatureProfileDefaults,
@@ -148,9 +148,21 @@ func leanFeatures() []FeatureID {
 		FeatureNumbersPercent,
 		FeatureCurrenciesFractions,
 		FeatureCurrenciesSymbols,
+		FeatureCurrenciesNarrowSymbols,
 		FeatureDatesGregorianPatterns,
 		FeatureDatesGregorianNames,
+		FeatureDatesGregorianDayPeriods,
+		FeatureDatesGregorianIntervals,
 		FeatureBCP47Extensions,
+		FeatureListsPatterns,
+		FeaturePluralsCardinal,
+		FeatureNumbersCompactDecimal,
+		FeatureUnitsDurationCore,
+		FeatureDatesRelativeTime,
+		FeatureDisplayNamesLanguages,
+		FeatureDisplayNamesTerritories,
+		FeatureDisplayNamesScripts,
+		FeatureDisplayNamesCalendars,
 	}
 }
 
@@ -163,10 +175,22 @@ func builtinCoverage(provider DataProvider) []Coverage {
 		{Feature: FeatureNumbersDecimal, Scope: ScopeLocale, Role: RoleAuthoritative, Status: StatusImplemented, Keys: locales},
 		{Feature: FeatureNumbersPercent, Scope: ScopeLocale, Role: RoleAuthoritative, Status: StatusImplemented, Keys: locales},
 		{Feature: FeatureCurrenciesFractions, Scope: ScopeCurrency, Role: RoleAuthoritative, Status: StatusImplemented, All: true},
-		{Feature: FeatureCurrenciesSymbols, Scope: ScopeCurrency, Role: RoleAuthoritative, Status: StatusDataAvailable, All: true},
+		{Feature: FeatureCurrenciesSymbols, Scope: ScopeFeaturePrivate, Role: RoleAuthoritative, Status: StatusImplemented, All: true},
+		{Feature: FeatureCurrenciesNarrowSymbols, Scope: ScopeFeaturePrivate, Role: RoleAuthoritative, Status: StatusImplemented, All: true},
 		{Feature: FeatureDatesGregorianPatterns, Scope: ScopeLocale, Role: RoleAuthoritative, Status: StatusImplemented, Keys: locales},
 		{Feature: FeatureDatesGregorianNames, Scope: ScopeLocale, Role: RoleAuthoritative, Status: StatusImplemented, Keys: locales},
+		{Feature: FeatureDatesGregorianDayPeriods, Scope: ScopeLocale, Role: RoleAuthoritative, Status: StatusImplemented, Keys: locales},
+		{Feature: FeatureDatesGregorianIntervals, Scope: ScopeLocale, Role: RoleAuthoritative, Status: StatusImplemented, Keys: locales},
 		{Feature: FeatureBCP47Extensions, Scope: ScopeGlobal, Role: RoleAuthoritative, Status: StatusImplemented, All: true},
+		{Feature: FeatureListsPatterns, Scope: ScopeLocale, Role: RoleAuthoritative, Status: StatusImplemented, Keys: locales},
+		{Feature: FeaturePluralsCardinal, Scope: ScopeLocale, Role: RoleAuthoritative, Status: StatusImplemented, Keys: locales},
+		{Feature: FeatureNumbersCompactDecimal, Scope: ScopeLocale, Role: RoleAuthoritative, Status: StatusImplemented, Keys: locales},
+		{Feature: FeatureUnitsDurationCore, Scope: ScopeLocale, Role: RoleAuthoritative, Status: StatusImplemented, Keys: locales},
+		{Feature: FeatureDatesRelativeTime, Scope: ScopeLocale, Role: RoleAuthoritative, Status: StatusImplemented, Keys: locales},
+		{Feature: FeatureDisplayNamesLanguages, Scope: ScopeFeaturePrivate, Role: RoleAuthoritative, Status: StatusImplemented, All: true},
+		{Feature: FeatureDisplayNamesTerritories, Scope: ScopeFeaturePrivate, Role: RoleAuthoritative, Status: StatusImplemented, All: true},
+		{Feature: FeatureDisplayNamesScripts, Scope: ScopeFeaturePrivate, Role: RoleAuthoritative, Status: StatusImplemented, All: true},
+		{Feature: FeatureDisplayNamesCalendars, Scope: ScopeFeaturePrivate, Role: RoleAuthoritative, Status: StatusImplemented, All: true},
 	}
 }
 
@@ -198,7 +222,7 @@ func Compose(bundles []Bundle, opts ...ComposeOption) (Bundle, error) {
 		opt(&cfg)
 	}
 	if len(bundles) == 0 {
-		return BuiltinLean(), nil
+		return Builtin(), nil
 	}
 	for i, b := range bundles {
 		if b == nil || b.Data() == nil {
@@ -374,10 +398,73 @@ func (p compositeProvider) CurrencyFraction(code string) CurrencyFraction {
 	return CurrencyFraction{Code: code, Digits: 2, CashDigits: 2}
 }
 
-func (p compositeProvider) CurrencySymbol(locale, code string) (string, bool) {
+func (p compositeProvider) CurrencySymbol(locale, code string, display CurrencyDisplayMode) (string, bool) {
 	for _, provider := range p.providers() {
-		if sym, ok := provider.CurrencySymbol(locale, code); ok {
+		if sym, ok := provider.CurrencySymbol(locale, code, display); ok {
 			return sym, true
+		}
+	}
+	return "", false
+}
+
+func (p compositeProvider) ListPattern(locale, typ, width string) (ListPattern, bool) {
+	for _, provider := range p.providers() {
+		if pattern, ok := provider.ListPattern(locale, typ, width); ok {
+			return pattern, true
+		}
+	}
+	return ListPattern{}, false
+}
+
+func (p compositeProvider) UnitPattern(locale, unit, width, category string) (string, bool) {
+	for _, provider := range p.providers() {
+		if pattern, ok := provider.UnitPattern(locale, unit, width, category); ok {
+			return pattern, true
+		}
+	}
+	return "", false
+}
+
+func (p compositeProvider) CompactPattern(locale, width string, magnitude int64, category string) (string, bool) {
+	for _, provider := range p.providers() {
+		if pattern, ok := provider.CompactPattern(locale, width, magnitude, category); ok {
+			return pattern, true
+		}
+	}
+	return "", false
+}
+
+func (p compositeProvider) RelativeTimePattern(locale, field, width, direction, category string) (string, bool) {
+	for _, provider := range p.providers() {
+		if pattern, ok := provider.RelativeTimePattern(locale, field, width, direction, category); ok {
+			return pattern, true
+		}
+	}
+	return "", false
+}
+
+func (p compositeProvider) RelativeSpecial(locale, field, width string, offset int) (string, bool) {
+	for _, provider := range p.providers() {
+		if text, ok := provider.RelativeSpecial(locale, field, width, offset); ok {
+			return text, true
+		}
+	}
+	return "", false
+}
+
+func (p compositeProvider) IntervalPattern(locale, skeleton, field string) (string, bool) {
+	for _, provider := range p.providers() {
+		if pattern, ok := provider.IntervalPattern(locale, skeleton, field); ok {
+			return pattern, true
+		}
+	}
+	return "", false
+}
+
+func (p compositeProvider) DisplayName(locale, kind, code string) (string, bool) {
+	for _, provider := range p.providers() {
+		if name, ok := provider.DisplayName(locale, kind, code); ok {
+			return name, true
 		}
 	}
 	return "", false
@@ -438,13 +525,147 @@ func (p compositeProvider) AvailableCurrencySymbols() []CurrencySymbolRecord {
 	out := []CurrencySymbolRecord{}
 	for _, provider := range p.providers() {
 		for _, rec := range provider.AvailableCurrencySymbols() {
-			if !seen[rec.Code] {
-				seen[rec.Code] = true
+			key := rec.Locale + "\x00" + rec.Code
+			if !seen[key] {
+				seen[key] = true
 				out = append(out, rec)
 			}
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Code < out[j].Code })
+	sort.Slice(out, func(i, j int) bool { return out[i].Locale+"\x00"+out[i].Code < out[j].Locale+"\x00"+out[j].Code })
+	return out
+}
+
+func (p compositeProvider) AvailableListPatterns() []ListPatternRecord {
+	seen := map[string]bool{}
+	out := []ListPatternRecord{}
+	for _, provider := range p.providers() {
+		for _, rec := range provider.AvailableListPatterns() {
+			key := rec.Locale + "\x00" + rec.Type + "\x00" + rec.Width
+			if !seen[key] {
+				seen[key] = true
+				out = append(out, rec)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Locale+"\x00"+out[i].Type+"\x00"+out[i].Width < out[j].Locale+"\x00"+out[j].Type+"\x00"+out[j].Width
+	})
+	return out
+}
+
+func (p compositeProvider) AvailableUnitPatterns() []UnitPatternRecord {
+	seen := map[string]bool{}
+	out := []UnitPatternRecord{}
+	for _, provider := range p.providers() {
+		for _, rec := range provider.AvailableUnitPatterns() {
+			key := rec.Locale + "\x00" + rec.Unit + "\x00" + rec.Width + "\x00" + rec.Category
+			if !seen[key] {
+				seen[key] = true
+				out = append(out, rec)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		return a.Locale+"\x00"+a.Unit+"\x00"+a.Width+"\x00"+a.Category < b.Locale+"\x00"+b.Unit+"\x00"+b.Width+"\x00"+b.Category
+	})
+	return out
+}
+
+func (p compositeProvider) AvailableCompactPatterns() []CompactPatternRecord {
+	seen := map[string]bool{}
+	out := []CompactPatternRecord{}
+	for _, provider := range p.providers() {
+		for _, rec := range provider.AvailableCompactPatterns() {
+			key := fmt.Sprintf("%s\x00%s\x00%020d\x00%s", rec.Locale, rec.Width, rec.Magnitude, rec.Category)
+			if !seen[key] {
+				seen[key] = true
+				out = append(out, rec)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		return fmt.Sprintf("%s\x00%s\x00%020d\x00%s", a.Locale, a.Width, a.Magnitude, a.Category) <
+			fmt.Sprintf("%s\x00%s\x00%020d\x00%s", b.Locale, b.Width, b.Magnitude, b.Category)
+	})
+	return out
+}
+
+func (p compositeProvider) AvailableRelativeTimePatterns() []RelativePatternRecord {
+	seen := map[string]bool{}
+	out := []RelativePatternRecord{}
+	for _, provider := range p.providers() {
+		for _, rec := range provider.AvailableRelativeTimePatterns() {
+			key := rec.Locale + "\x00" + rec.Field + "\x00" + rec.Width + "\x00" + rec.Direction + "\x00" + rec.Category
+			if !seen[key] {
+				seen[key] = true
+				out = append(out, rec)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		return a.Locale+"\x00"+a.Field+"\x00"+a.Width+"\x00"+a.Direction+"\x00"+a.Category <
+			b.Locale+"\x00"+b.Field+"\x00"+b.Width+"\x00"+b.Direction+"\x00"+b.Category
+	})
+	return out
+}
+
+func (p compositeProvider) AvailableRelativeSpecials() []RelativeSpecialRecord {
+	seen := map[string]bool{}
+	out := []RelativeSpecialRecord{}
+	for _, provider := range p.providers() {
+		for _, rec := range provider.AvailableRelativeSpecials() {
+			key := fmt.Sprintf("%s\x00%s\x00%s\x00%020d", rec.Locale, rec.Field, rec.Width, rec.Offset)
+			if !seen[key] {
+				seen[key] = true
+				out = append(out, rec)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		return fmt.Sprintf("%s\x00%s\x00%s\x00%020d", a.Locale, a.Field, a.Width, a.Offset) <
+			fmt.Sprintf("%s\x00%s\x00%s\x00%020d", b.Locale, b.Field, b.Width, b.Offset)
+	})
+	return out
+}
+
+func (p compositeProvider) AvailableIntervalPatterns() []IntervalPatternRecord {
+	seen := map[string]bool{}
+	out := []IntervalPatternRecord{}
+	for _, provider := range p.providers() {
+		for _, rec := range provider.AvailableIntervalPatterns() {
+			key := rec.Locale + "\x00" + rec.Skeleton + "\x00" + rec.Field
+			if !seen[key] {
+				seen[key] = true
+				out = append(out, rec)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Locale+"\x00"+out[i].Skeleton+"\x00"+out[i].Field < out[j].Locale+"\x00"+out[j].Skeleton+"\x00"+out[j].Field
+	})
+	return out
+}
+
+func (p compositeProvider) AvailableDisplayNames() []DisplayNameRecord {
+	seen := map[string]bool{}
+	out := []DisplayNameRecord{}
+	for _, provider := range p.providers() {
+		for _, rec := range provider.AvailableDisplayNames() {
+			key := rec.Locale + "\x00" + rec.Kind + "\x00" + rec.Code
+			if !seen[key] {
+				seen[key] = true
+				out = append(out, rec)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Locale+"\x00"+out[i].Kind+"\x00"+out[i].Code < out[j].Locale+"\x00"+out[j].Kind+"\x00"+out[j].Code
+	})
 	return out
 }
 

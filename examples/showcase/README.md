@@ -35,9 +35,9 @@ What it shows:
 - Direct checked lookups with `tr.Lookup(catalogText(...))`, so the code shows lookup status and diagnostics without
   hiding the main API call.
 - Typed values for currency, dates, and percentages, including profile numbering-system behavior.
-- Formatter diagnostics surfaced from checked lookup results, such as currency symbol fallback.
-- Ordinary translations for list-like UI text and unit-like text such as `{n} kilometers`, without pretending that CLDR
-  list or unit pattern data is present in the lean built-in bundle.
+- Formatter diagnostics surfaced from checked lookup results when formatting genuinely falls back.
+- Typed values for CLDR-backed lists, compact numbers, elapsed durations, relative time, intervals, and display names
+  can use the same profile-bound formatter surface as currency and dates.
 - `content.ProjectFieldWithLookup` projecting a localized field payload with explicit diagnostic lookup metadata.
 - `web.Middleware` running through `httptest`, including request locale negotiation, localizer context, `Vary`, and
   `Content-Language`.

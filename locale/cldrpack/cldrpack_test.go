@@ -14,24 +14,24 @@ import (
 	"github.com/nmeilick/go-i18n/locale/cldr"
 )
 
-func TestBuildOpenParityWithBuiltinLean(t *testing.T) {
-	pack, err := Build(cldr.BuiltinLean())
+func TestBuildOpenParityWithBuiltin(t *testing.T) {
+	pack, err := Build(cldr.Builtin())
 	if err != nil {
 		t.Fatal(err)
 	}
-	bundle, err := FromBytes("lean.cldrpack", pack, WithHashVerification(true))
+	bundle, err := FromBytes("core.cldrpack", pack, WithHashVerification(true))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer bundle.Close()
-	if bundle.Info().Versions.CLDR != cldr.BuiltinLean().Info().Versions.CLDR {
+	if bundle.Info().Versions.CLDR != cldr.Builtin().Info().Versions.CLDR {
 		t.Fatalf("CLDR version = %q", bundle.Info().Versions.CLDR)
 	}
 	got, ok := bundle.Data().Locale("ar")
 	if !ok || got.NumberingSystem == "" || got.MonthsWide[0] == "" {
 		t.Fatalf("locale ar = %#v ok=%v", got, ok)
 	}
-	want, _ := cldr.BuiltinLean().Data().Locale("ar")
+	want, _ := cldr.Builtin().Data().Locale("ar")
 	if got.NumberingSystem != want.NumberingSystem || got.DateFormats != want.DateFormats {
 		t.Fatalf("pack locale differs from built-in")
 	}
@@ -54,7 +54,7 @@ func TestBuildOpenParityWithBuiltinLean(t *testing.T) {
 }
 
 func TestHashMismatchIsRejectedWhenVerificationRequested(t *testing.T) {
-	pack, err := Build(cldr.BuiltinLean())
+	pack, err := Build(cldr.Builtin())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,11 +66,11 @@ func TestHashMismatchIsRejectedWhenVerificationRequested(t *testing.T) {
 }
 
 func TestZstdChunkIsLazyAndVerified(t *testing.T) {
-	pack, err := Build(cldr.BuiltinLean(), WithCodec(CodecZstd))
+	pack, err := Build(cldr.Builtin(), WithCodec(CodecZstd))
 	if err != nil {
 		t.Fatal(err)
 	}
-	bundle, err := FromBytes("lean-zstd.cldrpack", pack, WithHashVerification(true))
+	bundle, err := FromBytes("core-zstd.cldrpack", pack, WithHashVerification(true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,11 +91,11 @@ func TestZstdChunkIsLazyAndVerified(t *testing.T) {
 }
 
 func TestValidateForcesLazyPayloadLoad(t *testing.T) {
-	pack, err := Build(cldr.BuiltinLean(), WithCodec(CodecZstd))
+	pack, err := Build(cldr.Builtin(), WithCodec(CodecZstd))
 	if err != nil {
 		t.Fatal(err)
 	}
-	bundle, err := FromBytes("lean-zstd.cldrpack", pack)
+	bundle, err := FromBytes("core-zstd.cldrpack", pack)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestValidateForcesLazyPayloadLoad(t *testing.T) {
 }
 
 func TestSelectedLocaleCoverageSurvivesPackRoundTrip(t *testing.T) {
-	selected, plan, err := cldr.SelectBundle(cldr.BuiltinLean(), cldr.Selection{
+	selected, plan, err := cldr.SelectBundle(cldr.Builtin(), cldr.Selection{
 		Locales:  []string{"de"},
 		Features: []cldr.FeatureID{cldr.FeatureNumbersDecimal},
 	})
@@ -159,7 +159,7 @@ func TestSignatureVerification(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pack, err := Build(cldr.BuiltinLean(), WithEd25519Signature("test-key", priv, []byte("fixture")))
+	pack, err := Build(cldr.Builtin(), WithEd25519Signature("test-key", priv, []byte("fixture")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestSignatureVerification(t *testing.T) {
 	if _, err := FromBytes("signed.cldrpack", pack, WithEd25519Verification(map[string]ed25519.PublicKey{"test-key": otherPub})); err == nil {
 		t.Fatal("expected invalid signature error")
 	}
-	unsigned, err := Build(cldr.BuiltinLean())
+	unsigned, err := Build(cldr.Builtin())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,15 +191,15 @@ func TestSignatureVerification(t *testing.T) {
 }
 
 func TestOpenFSReadAllLimitAndUnboundedDefault(t *testing.T) {
-	pack, err := Build(cldr.BuiltinLean())
+	pack, err := Build(cldr.Builtin())
 	if err != nil {
 		t.Fatal(err)
 	}
-	fsys := nonSeekFS{data: map[string][]byte{"lean.cldrpack": pack}}
-	if _, err := OpenFS(fsys, "lean.cldrpack", WithReadAllLimit(16)); err == nil {
+	fsys := nonSeekFS{data: map[string][]byte{"core.cldrpack": pack}}
+	if _, err := OpenFS(fsys, "core.cldrpack", WithReadAllLimit(16)); err == nil {
 		t.Fatal("expected read-all limit error")
 	}
-	bundle, err := OpenFS(fsys, "lean.cldrpack")
+	bundle, err := OpenFS(fsys, "core.cldrpack")
 	if err != nil {
 		t.Fatalf("unbounded default rejected pack: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestOpenFSReadAllLimitAndUnboundedDefault(t *testing.T) {
 }
 
 func TestPackLimitsAndProviderRefValidation(t *testing.T) {
-	pack, err := Build(cldr.BuiltinLean())
+	pack, err := Build(cldr.Builtin())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +231,7 @@ func TestPackLimitsAndProviderRefValidation(t *testing.T) {
 }
 
 func TestMalformedPackErrors(t *testing.T) {
-	pack, err := Build(cldr.BuiltinLean())
+	pack, err := Build(cldr.Builtin())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -493,7 +493,7 @@ func sectionData(t *testing.T, pack []byte, kind uint32) []byte {
 
 func selectedLocalePack(t *testing.T) []byte {
 	t.Helper()
-	selected, _, err := cldr.SelectBundle(cldr.BuiltinLean(), cldr.Selection{
+	selected, _, err := cldr.SelectBundle(cldr.Builtin(), cldr.Selection{
 		Locales:  []string{"de"},
 		Features: []cldr.FeatureID{cldr.FeatureNumbersDecimal},
 	})
@@ -508,11 +508,11 @@ func selectedLocalePack(t *testing.T) []byte {
 }
 
 func TestBuildIsDeterministic(t *testing.T) {
-	a, err := Build(cldr.BuiltinLean())
+	a, err := Build(cldr.Builtin())
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := Build(cldr.BuiltinLean())
+	b, err := Build(cldr.Builtin())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -522,7 +522,7 @@ func TestBuildIsDeterministic(t *testing.T) {
 }
 
 func BenchmarkOpenPackHashVerified(b *testing.B) {
-	pack, err := Build(cldr.BuiltinLean(), WithCodec(CodecZstd))
+	pack, err := Build(cldr.Builtin(), WithCodec(CodecZstd))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -537,7 +537,7 @@ func BenchmarkOpenPackHashVerified(b *testing.B) {
 }
 
 func BenchmarkWarmLocaleLookup(b *testing.B) {
-	pack, err := Build(cldr.BuiltinLean(), WithCodec(CodecZstd))
+	pack, err := Build(cldr.Builtin(), WithCodec(CodecZstd))
 	if err != nil {
 		b.Fatal(err)
 	}

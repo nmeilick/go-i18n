@@ -19,23 +19,30 @@ const FeatureRegistryMinor = 0
 type FeatureID string
 
 const (
-	FeatureCoreIdentity            FeatureID = "core.identity"
-	FeatureProfileDefaults         FeatureID = "profile.defaults"
-	FeatureNumbersSymbols          FeatureID = "numbers.symbols"
-	FeatureNumbersDecimal          FeatureID = "numbers.decimal"
-	FeatureNumbersPercent          FeatureID = "numbers.percent"
-	FeatureCurrenciesFractions     FeatureID = "currencies.fractions"
-	FeatureCurrenciesSymbols       FeatureID = "currencies.symbols"
-	FeatureDatesGregorianPatterns  FeatureID = "dates.gregorian.patterns"
-	FeatureDatesGregorianNames     FeatureID = "dates.gregorian.names"
-	FeatureBCP47Extensions         FeatureID = "bcp47.extensions"
-	FeatureListsPatterns           FeatureID = "lists.patterns"
-	FeatureUnitsPatterns           FeatureID = "units.patterns"
-	FeaturePluralsCardinal         FeatureID = "plurals.cardinal"
-	FeaturePluralsOrdinal          FeatureID = "plurals.ordinal"
-	FeatureTimeZonesNames          FeatureID = "timezones.names"
-	FeatureDisplayNamesLanguages   FeatureID = "displaynames.languages"
-	FeatureDisplayNamesTerritories FeatureID = "displaynames.territories"
+	FeatureCoreIdentity             FeatureID = "core.identity"
+	FeatureProfileDefaults          FeatureID = "profile.defaults"
+	FeatureNumbersSymbols           FeatureID = "numbers.symbols"
+	FeatureNumbersDecimal           FeatureID = "numbers.decimal"
+	FeatureNumbersPercent           FeatureID = "numbers.percent"
+	FeatureCurrenciesFractions      FeatureID = "currencies.fractions"
+	FeatureCurrenciesSymbols        FeatureID = "currencies.symbols.standard"
+	FeatureCurrenciesNarrowSymbols  FeatureID = "currencies.symbols.narrow"
+	FeatureDatesGregorianPatterns   FeatureID = "dates.gregorian.patterns"
+	FeatureDatesGregorianNames      FeatureID = "dates.gregorian.names"
+	FeatureDatesGregorianDayPeriods FeatureID = "dates.gregorian.dayperiods"
+	FeatureDatesGregorianIntervals  FeatureID = "dates.gregorian.intervals"
+	FeatureBCP47Extensions          FeatureID = "bcp47.extensions"
+	FeatureListsPatterns            FeatureID = "lists.patterns"
+	FeatureUnitsDurationCore        FeatureID = "units.duration_core"
+	FeaturePluralsCardinal          FeatureID = "plurals.cardinal"
+	FeaturePluralsOrdinal           FeatureID = "plurals.ordinal"
+	FeatureNumbersCompactDecimal    FeatureID = "numbers.compact.decimal"
+	FeatureDatesRelativeTime        FeatureID = "dates.relative_time"
+	FeatureTimeZonesNames           FeatureID = "timezones.names"
+	FeatureDisplayNamesLanguages    FeatureID = "displaynames.languages"
+	FeatureDisplayNamesTerritories  FeatureID = "displaynames.territories"
+	FeatureDisplayNamesScripts      FeatureID = "displaynames.scripts"
+	FeatureDisplayNamesCalendars    FeatureID = "displaynames.calendars"
 )
 
 // CapabilityStatus describes behavior, not merely data presence.
@@ -168,10 +175,21 @@ type CurrencyFraction struct {
 	Rounding   int
 }
 
-// CurrencySymbolRecord stores a compact global currency symbol.
+// CurrencyDisplayMode selects how a currency code is rendered.
+type CurrencyDisplayMode string
+
+const (
+	CurrencyDisplaySymbol       CurrencyDisplayMode = "symbol"
+	CurrencyDisplayNarrowSymbol CurrencyDisplayMode = "narrow-symbol"
+	CurrencyDisplayCode         CurrencyDisplayMode = "code"
+)
+
+// CurrencySymbolRecord stores a locale-specific currency display symbol.
 type CurrencySymbolRecord struct {
+	Locale string
 	Code   string
 	Symbol string
+	Narrow string
 }
 
 // LocaleRecord stores effective locale-specific formatting data.
@@ -186,8 +204,78 @@ type LocaleRecord struct {
 	MonthsAbbr      [12]string
 	WeekdaysWide    [7]string
 	WeekdaysAbbr    [7]string
+	DayPeriods      [2]string
 	CurrencyPattern string
 	Accounting      string
+}
+
+// ListPattern stores one CLDR list pattern set.
+type ListPattern struct {
+	Two    string
+	Start  string
+	Middle string
+	End    string
+}
+
+// ListPatternRecord stores one localized list pattern set.
+type ListPatternRecord struct {
+	Locale  string
+	Type    string
+	Width   string
+	Pattern ListPattern
+}
+
+// UnitPatternRecord stores one localized unit pattern for one plural category.
+type UnitPatternRecord struct {
+	Locale   string
+	Unit     string
+	Width    string
+	Category string
+	Pattern  string
+}
+
+// CompactPatternRecord stores one compact-decimal pattern.
+type CompactPatternRecord struct {
+	Locale    string
+	Width     string
+	Magnitude int64
+	Category  string
+	Pattern   string
+}
+
+// RelativePatternRecord stores one relative-time pattern.
+type RelativePatternRecord struct {
+	Locale    string
+	Field     string
+	Width     string
+	Direction string
+	Category  string
+	Pattern   string
+}
+
+// RelativeSpecialRecord stores one named relative-time value such as today.
+type RelativeSpecialRecord struct {
+	Locale string
+	Field  string
+	Width  string
+	Offset int
+	Text   string
+}
+
+// IntervalPatternRecord stores one Gregorian interval pattern.
+type IntervalPatternRecord struct {
+	Locale   string
+	Skeleton string
+	Field    string
+	Pattern  string
+}
+
+// DisplayNameRecord stores one localized code display name.
+type DisplayNameRecord struct {
+	Locale string
+	Kind   string
+	Code   string
+	Name   string
 }
 
 // BCP47TypeRecord stores known BCP-47 extension type values.
@@ -205,11 +293,25 @@ type DataProvider interface {
 	Parent(tag string) (string, bool)
 	RegionDefaults(region string) (RegionDefaults, bool)
 	CurrencyFraction(code string) CurrencyFraction
-	CurrencySymbol(locale, code string) (string, bool)
+	CurrencySymbol(locale, code string, display CurrencyDisplayMode) (string, bool)
+	ListPattern(locale, typ, width string) (ListPattern, bool)
+	UnitPattern(locale, unit, width, category string) (string, bool)
+	CompactPattern(locale, width string, magnitude int64, category string) (string, bool)
+	RelativeTimePattern(locale, field, width, direction, category string) (string, bool)
+	RelativeSpecial(locale, field, width string, offset int) (string, bool)
+	IntervalPattern(locale, skeleton, field string) (string, bool)
+	DisplayName(locale, kind, code string) (string, bool)
 	BCP47Types(key string) []BCP47TypeRecord
 	AvailableLocales() []string
 	AvailableRegions() []string
 	AvailableCurrencyFractions() []CurrencyFraction
 	AvailableCurrencySymbols() []CurrencySymbolRecord
+	AvailableListPatterns() []ListPatternRecord
+	AvailableUnitPatterns() []UnitPatternRecord
+	AvailableCompactPatterns() []CompactPatternRecord
+	AvailableRelativeTimePatterns() []RelativePatternRecord
+	AvailableRelativeSpecials() []RelativeSpecialRecord
+	AvailableIntervalPatterns() []IntervalPatternRecord
+	AvailableDisplayNames() []DisplayNameRecord
 	AvailableBCP47Keys() []string
 }

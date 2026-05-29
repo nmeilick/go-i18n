@@ -434,7 +434,31 @@ func (a *app) dataCmd() *cobra.Command {
 				}
 				return err
 			}
-			return a.write(cmd, report, "generated data ok cldr=%s bytes=%d\n", report.CLDRVersion, report.OutputBytes)
+			return a.write(cmd, report, "generated data ok cldr=%s source=%d\n", report.CLDRVersion, report.OutputBytes)
+		},
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:   "footprint",
+		Short: "Measure generated CLDR data size by domain.",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, _, err := a.loadConfig(false)
+			if err != nil {
+				return err
+			}
+			w, err := workflow.New(cfg)
+			if err != nil {
+				return err
+			}
+			report, err := w.DataFootprint(context.Background())
+			if err != nil {
+				if a.jsonOut {
+					_ = a.writeJSON(cmd, report)
+				}
+				return err
+			}
+			rawPack, zstdPack := dataFootprintPacks(report)
+			return a.write(cmd, report, "generated data footprint cldr=%s source=%d pack_raw=%d pack_zstd=%d\n", report.CLDRVersion, report.OutputBytes, rawPack, zstdPack)
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
@@ -491,13 +515,25 @@ func (a *app) dataCmd() *cobra.Command {
 				}
 				return err
 			}
-			return a.write(cmd, report, "generated data changed=%d bytes=%d\n", len(report.Changed), report.OutputBytes)
+			return a.write(cmd, report, "generated data changed=%d source=%d\n", len(report.Changed), report.OutputBytes)
 		},
 	}
 	updateCmd.Flags().BoolVarP(&dryRun, "dry-run", "n", false, "show generated-data changes without writing files")
 	updateCmd.Flags().BoolVarP(&force, "force", "f", false, "overwrite generated files even when safety checks object")
 	cmd.AddCommand(updateCmd)
 	return cmd
+}
+
+func dataFootprintPacks(report workflow.DataReport) (raw, zstd int) {
+	for _, row := range report.SizeReport {
+		switch row.Domain {
+		case "cldrpack_raw":
+			raw = row.EncodedBytes
+		case "cldrpack_zstd":
+			zstd = row.EncodedBytes
+		}
+	}
+	return raw, zstd
 }
 
 type bundleRequest struct {
@@ -767,7 +803,7 @@ func planBundle(ctx context.Context, req bundleRequest) (bundleReport, error) {
 	if err != nil {
 		return bundleReport{}, err
 	}
-	_, plan, err := cldr.SelectBundle(cldr.BuiltinLean(), selection)
+	_, plan, err := cldr.SelectBundle(cldr.Builtin(), selection)
 	if err != nil {
 		return bundleReport{}, err
 	}
@@ -810,7 +846,7 @@ func generateBundle(ctx context.Context, req bundleRequest, dryRun bool) (bundle
 	if err != nil {
 		return bundleReport{}, err
 	}
-	selected, plan, err := cldr.SelectBundle(cldr.BuiltinLean(), selection)
+	selected, plan, err := cldr.SelectBundle(cldr.Builtin(), selection)
 	if err != nil {
 		return bundleReport{}, err
 	}
@@ -848,8 +884,8 @@ func generateBundle(ctx context.Context, req bundleRequest, dryRun bool) (bundle
 	case "embedded-pack":
 		data, err = renderEmbeddedPack(req.packageName, pack)
 	case "native-go":
-		if !isBuiltinSelection(plan, cldr.BuiltinLean().Info()) {
-			return bundleReport{}, fmt.Errorf("native-go mode currently supports only the full built-in lean selection; use embedded-pack or external-pack for custom selections")
+		if !isBuiltinSelection(plan, cldr.Builtin().Info()) {
+			return bundleReport{}, fmt.Errorf("native-go mode currently supports only the full built-in core selection; use embedded-pack or external-pack for custom selections")
 		}
 		data, err = renderNativeGo(req.packageName)
 	default:
@@ -1056,11 +1092,23 @@ func expandRequestedFeatures(values []string) ([]cldr.FeatureID, error) {
 		case "profile", "profile.defaults":
 			out = append(out, cldr.FeatureProfileDefaults)
 		case "numbers":
-			out = append(out, cldr.FeatureNumbersSymbols, cldr.FeatureNumbersDecimal, cldr.FeatureNumbersPercent)
-		case "currencies":
-			out = append(out, cldr.FeatureCurrenciesFractions, cldr.FeatureCurrenciesSymbols)
+			out = append(out, cldr.FeatureNumbersSymbols, cldr.FeatureNumbersDecimal, cldr.FeatureNumbersPercent, cldr.FeatureNumbersCompactDecimal)
+		case "compact", "compact-numbers":
+			out = append(out, cldr.FeatureNumbersSymbols, cldr.FeatureNumbersDecimal, cldr.FeaturePluralsCardinal, cldr.FeatureNumbersCompactDecimal)
+		case "currencies", "currency":
+			out = append(out, cldr.FeatureCurrenciesFractions, cldr.FeatureCurrenciesSymbols, cldr.FeatureCurrenciesNarrowSymbols)
 		case "dates", "dates.gregorian":
-			out = append(out, cldr.FeatureDatesGregorianPatterns, cldr.FeatureDatesGregorianNames)
+			out = append(out, cldr.FeatureDatesGregorianPatterns, cldr.FeatureDatesGregorianNames, cldr.FeatureDatesGregorianDayPeriods, cldr.FeatureDatesGregorianIntervals)
+		case "lists":
+			out = append(out, cldr.FeatureListsPatterns)
+		case "units", "duration-units":
+			out = append(out, cldr.FeatureUnitsDurationCore)
+		case "plurals":
+			out = append(out, cldr.FeaturePluralsCardinal)
+		case "relative", "relative-time":
+			out = append(out, cldr.FeatureDatesRelativeTime)
+		case "displaynames", "display-names":
+			out = append(out, cldr.FeatureDisplayNamesLanguages, cldr.FeatureDisplayNamesTerritories, cldr.FeatureDisplayNamesScripts, cldr.FeatureDisplayNamesCalendars)
 		case "bcp47", "extensions":
 			out = append(out, cldr.FeatureBCP47Extensions)
 		default:
@@ -1149,7 +1197,7 @@ func renderNativeGo(packageName string) ([]byte, error) {
 	src := "// Code generated by lingo; DO NOT EDIT.\n" +
 		"package " + packageName + "\n\n" +
 		"import \"github.com/nmeilick/go-i18n/locale/cldr\"\n\n" +
-		"func Bundle() cldr.Bundle { return cldr.BuiltinLean() }\n"
+		"func Bundle() cldr.Bundle { return cldr.Builtin() }\n"
 	return goformat.Source([]byte(src))
 }
 

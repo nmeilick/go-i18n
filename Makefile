@@ -55,7 +55,7 @@ lint: ## Run go vet and staticcheck.
 	@$(MAKE_RECURSE) vet
 	@command -v "$(STATICCHECK)" >/dev/null 2>&1 || \
 		{ printf 'error: %s not found; install honnef.co/go/tools/cmd/staticcheck\n' "$(STATICCHECK)" >&2; exit 2; }
-	$(STATICCHECK) ./...
+	$(STATICCHECK) -tags staticcheck ./...
 
 fmt: ## Format Go source files.
 	gofmt -w $$(find . -path ./.git -prune -o -name '*.go' -print)

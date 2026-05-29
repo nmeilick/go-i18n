@@ -285,7 +285,7 @@ func TestLookupObserverReceivesFormatterDiagnosticsForExactLookup(t *testing.T) 
 	if len(events) != 1 {
 		t.Fatalf("events = %#v", events)
 	}
-	if events[0].Code != "formatter_unsupported_unit" || attrValue(events[0].Attrs, "i18n.status") != "exact" {
+	if events[0].Code != "formatter_unit_unavailable" || attrValue(events[0].Attrs, "i18n.status") != "exact" {
 		t.Fatalf("event = %#v", events[0])
 	}
 }

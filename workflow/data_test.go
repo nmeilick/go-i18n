@@ -65,6 +65,9 @@ func TestDataUpdateAndCheck(t *testing.T) {
 	if len(report.Changed) != 0 || !report.SizeBudgetOK {
 		t.Fatalf("report = %#v", report)
 	}
+	if !hasDataSizeRow(report.SizeReport, "generated_go") || !hasDataSizeRow(report.SizeReport, "currency_symbols") {
+		t.Fatalf("size report = %#v", report.SizeReport)
+	}
 }
 
 func repoRoot(t *testing.T) string {
@@ -83,4 +86,13 @@ func repoRoot(t *testing.T) string {
 		}
 		dir = next
 	}
+}
+
+func hasDataSizeRow(rows []cldrgen.SizeRow, domain string) bool {
+	for _, row := range rows {
+		if row.Domain == domain && (row.SourceBytes > 0 || row.EncodedBytes > 0) {
+			return true
+		}
+	}
+	return false
 }

@@ -74,7 +74,7 @@ func encodeMeta(info cldr.Info, pool *stringPool) []byte {
 		"cldrpack_schema_version":  "1.0",
 		"cldrpack_integrity_hash":  "sha256",
 		"cldrpack_signature_algs":  "ed25519",
-		"cldrpack_payload_formats": "provider-v1",
+		"cldrpack_payload_formats": "provider-core",
 	}
 	keys := make([]string, 0, len(values))
 	for key := range values {

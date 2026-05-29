@@ -11,6 +11,7 @@ import (
 
 	"github.com/nmeilick/go-i18n/internal/cldrdata"
 	"github.com/nmeilick/go-i18n/observe"
+	"golang.org/x/text/feature/plural"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 	"golang.org/x/text/number"
@@ -33,6 +34,15 @@ type CurrencySource string
 const (
 	CurrencyExplicit CurrencySource = "explicit"
 	CurrencyProfile  CurrencySource = "profile"
+)
+
+// CurrencyDisplayMode selects how a currency code is rendered.
+type CurrencyDisplayMode string
+
+const (
+	CurrencyDisplaySymbol       CurrencyDisplayMode = "symbol"
+	CurrencyDisplayNarrowSymbol CurrencyDisplayMode = "narrow-symbol"
+	CurrencyDisplayCode         CurrencyDisplayMode = "code"
 )
 
 // DateTimeKind describes date/time formatting intent.
@@ -62,6 +72,35 @@ const (
 	UnitNarrow UnitWidth = "narrow"
 )
 
+// RelativeUnit is a CLDR relative-time field.
+type RelativeUnit string
+
+const (
+	RelativeSecond RelativeUnit = "second"
+	RelativeMinute RelativeUnit = "minute"
+	RelativeHour   RelativeUnit = "hour"
+	RelativeDay    RelativeUnit = "day"
+	RelativeWeek   RelativeUnit = "week"
+	RelativeMonth  RelativeUnit = "month"
+	RelativeYear   RelativeUnit = "year"
+)
+
+// RelativeDirection describes whether a relative value is in the past or future.
+type RelativeDirection string
+
+const (
+	RelativePast   RelativeDirection = "past"
+	RelativeFuture RelativeDirection = "future"
+)
+
+// RelativeNumericMode controls whether named forms such as "yesterday" are allowed.
+type RelativeNumericMode string
+
+const (
+	RelativeAuto   RelativeNumericMode = "auto"
+	RelativeAlways RelativeNumericMode = "always"
+)
+
 // NumberSpec is a semantic request to format a number.
 type NumberSpec struct {
 	Value              any
@@ -79,7 +118,7 @@ type CurrencySpec struct {
 	Value          any
 	Code           CurrencyCode
 	CodeSource     CurrencySource
-	Display        string
+	Display        CurrencyDisplayMode
 	Accounting     bool
 	CashDigits     bool
 	FractionDigits *int
@@ -116,6 +155,50 @@ type UnitSpec struct {
 type DurationSpec struct {
 	Value time.Duration
 	Width UnitWidth
+}
+
+// Period is a calendar-style quantity. It is not normalized and does not
+// compute calendar differences from two dates.
+type Period struct {
+	Years  int
+	Months int
+	Weeks  int
+	Days   int
+}
+
+// PeriodSpec is a semantic request to format a calendar-style period.
+type PeriodSpec struct {
+	Value Period
+	Width UnitWidth
+}
+
+// RelativeSpec is a semantic request to format an explicit relative quantity.
+type RelativeSpec struct {
+	Value     int64
+	Unit      RelativeUnit
+	Direction RelativeDirection
+	Width     UnitWidth
+	Numeric   RelativeNumericMode
+}
+
+// RelativeTimeSpec derives a relative quantity from two instants.
+type RelativeTimeSpec struct {
+	Target    time.Time
+	Reference time.Time
+	Width     UnitWidth
+	Numeric   RelativeNumericMode
+	TimeZone  *time.Location
+}
+
+// DateTimeIntervalSpec is a semantic request to format a date/time range.
+type DateTimeIntervalSpec struct {
+	Start        time.Time
+	End          time.Time
+	Kind         DateTimeKind
+	Width        string
+	TimeZone     *time.Location
+	PreserveZone bool
+	Calendar     string
 }
 
 // FormatPolicy controls strictness and safety limits for formatter calls.
@@ -196,6 +279,10 @@ type Formatter interface {
 	FormatList(FormatContext, ListSpec) (string, []FormatDiagnostic)
 	FormatUnit(FormatContext, UnitSpec) (string, []FormatDiagnostic)
 	FormatDuration(FormatContext, DurationSpec) (string, []FormatDiagnostic)
+	FormatPeriod(FormatContext, PeriodSpec) (string, []FormatDiagnostic)
+	FormatRelative(FormatContext, RelativeSpec) (string, []FormatDiagnostic)
+	FormatRelativeTime(FormatContext, RelativeTimeSpec) (string, []FormatDiagnostic)
+	FormatDateTimeInterval(FormatContext, DateTimeIntervalSpec) (string, []FormatDiagnostic)
 	DataVersion() string
 }
 
@@ -271,13 +358,34 @@ func (f *CLDRFormatter) formatCompactNumber(ctx FormatContext, spec NumberSpec, 
 		spec.Kind = NumberDecimal
 		return f.FormatNumber(ctx, spec)
 	}
-	if policy(ctx).Strict {
-		return finishFormatFallback(ctx, "number", "unsupported_compact_number", fmt.Sprint(magnitude))
+	width := normalizeCompactWidth(spec.CompactDisplayName)
+	pattern, ok := f.data.CompactPattern(effectiveFormatTag(ctx).String(), width, magnitude, f.pluralCategory(ctx, compactPluralValue(value, magnitude)))
+	if !ok {
+		pattern, ok = f.data.CompactPattern(effectiveFormatTag(ctx).String(), width, magnitude, "other")
 	}
-	spec.Kind = NumberDecimal
-	text, ds := f.FormatNumber(ctx, spec)
-	ds = append(ds, fallbackFormatDiagnostic(ctx, "number", "unsupported_compact_number", fmt.Sprint(magnitude), "info"))
-	return finishFormat(ctx, "number", text, ds)
+	if !ok || pattern == "0" {
+		if policy(ctx).Strict {
+			return finishFormatFallback(ctx, "number", "compact_pattern_unavailable", fmt.Sprint(magnitude))
+		}
+		spec.Kind = NumberDecimal
+		text, ds := f.FormatNumber(ctx, spec)
+		ds = append(ds, fallbackFormatDiagnostic(ctx, "number", "compact_pattern_unavailable", fmt.Sprint(magnitude), "info"))
+		return finishFormat(ctx, "number", text, ds)
+	}
+	scaled := value / compactDivisor(pattern, magnitude)
+	numSpec := spec
+	numSpec.Value = scaled
+	numSpec.Kind = NumberDecimal
+	digits := compactFractionDigits(pattern)
+	numSpec.MinFractionDigits = &digits
+	numSpec.MaxFractionDigits = &digits
+	num, ds := f.FormatNumber(withoutFormatObserver(ctx), numSpec)
+	if len(ds) > 0 && policy(ctx).Strict {
+		return finishFormat(ctx, "number", num, ds)
+	}
+	text := replaceCompactNumber(pattern, num)
+	out, bds := boundFormatted(ctx, text, "number")
+	return finishFormat(ctx, "number", out, append(ds, bds...))
 }
 
 func (f *CLDRFormatter) FormatCurrency(ctx FormatContext, spec CurrencySpec) (string, []FormatDiagnostic) {
@@ -316,9 +424,13 @@ func (f *CLDRFormatter) FormatCurrency(ctx FormatContext, spec CurrencySpec) (st
 	}
 	diagnostics := append([]FormatDiagnostic(nil), ds...)
 	tag := effectiveFormatTag(ctx)
+	display := spec.Display
+	if display == "" {
+		display = CurrencyDisplaySymbol
+	}
 	symbol := code.String()
-	if spec.Display != "code" {
-		if s, ok := f.data.CurrencySymbol(tag.String(), code.String()); ok && s != "" {
+	if display != CurrencyDisplayCode {
+		if s, ok := f.data.CurrencySymbol(tag.String(), code.String(), cldrdata.CurrencyDisplayMode(display)); ok && s != "" {
 			symbol = s
 		} else {
 			diagnostics = append(diagnostics, FormatDiagnostic{
@@ -422,10 +534,18 @@ func (f *CLDRFormatter) FormatList(ctx FormatContext, spec ListSpec) (string, []
 	if len(items) == 1 {
 		return finishBoundFormatted(ctx, "list", items[0])
 	}
-	pattern := fallbackListPattern(effectiveFormatTag(ctx), spec.Type)
+	pattern, ok := f.data.ListPattern(effectiveFormatTag(ctx).String(), string(spec.Type), spec.Width)
+	if !ok {
+		if policy(ctx).Strict {
+			return finishFormatFallback(ctx, "list", "list_pattern_unavailable", string(spec.Type))
+		}
+		pattern = fallbackListPattern(effectiveFormatTag(ctx), spec.Type)
+	}
 	text := applyListPattern(pattern, items)
 	out, ds := boundFormatted(ctx, text, "list")
-	ds = append(ds, fallbackFormatDiagnostic(ctx, "list", "unsupported_list_patterns", string(spec.Type), "info"))
+	if !ok {
+		ds = append(ds, fallbackFormatDiagnostic(ctx, "list", "list_pattern_unavailable", string(spec.Type), "info"))
+	}
 	return finishFormat(ctx, "list", out, ds)
 }
 
@@ -436,14 +556,20 @@ func (f *CLDRFormatter) FormatUnit(ctx FormatContext, spec UnitSpec) (string, []
 	if len(ds) > 0 && policy(ctx).Strict {
 		return finishFormat(ctx, "unit", num, ds)
 	}
-	if policy(ctx).Strict {
-		return finishFormatFallback(ctx, "unit", "unsupported_unit", spec.Unit)
+	category := f.pluralCategory(ctx, spec.Value)
+	pattern, ok := f.data.UnitPattern(effectiveFormatTag(ctx).String(), spec.Unit, string(spec.Width), category)
+	if !ok {
+		if policy(ctx).Strict {
+			return finishFormatFallback(ctx, "unit", "unit_unavailable", spec.Unit)
+		}
+		pattern = "{0} " + spec.Unit
 	}
-	pattern := "{0} " + spec.Unit
 	text := strings.ReplaceAll(pattern, "{0}", num)
 	out, bds := boundFormatted(ctx, text, "unit")
 	diagnostics := append([]FormatDiagnostic(nil), ds...)
-	diagnostics = append(diagnostics, fallbackFormatDiagnostic(ctx, "unit", "unsupported_unit", spec.Unit, "info"))
+	if !ok {
+		diagnostics = append(diagnostics, fallbackFormatDiagnostic(ctx, "unit", "unit_unavailable", spec.Unit, "info"))
+	}
 	return finishFormat(ctx, "unit", out, append(diagnostics, bds...))
 }
 
@@ -455,33 +581,208 @@ func (f *CLDRFormatter) FormatDuration(ctx FormatContext, spec DurationSpec) (st
 	h := d / time.Hour
 	d -= h * time.Hour
 	m := d / time.Minute
-	if h > 0 {
-		subCtx := withoutFormatObserver(ctx)
-		hour, hds := f.FormatUnit(subCtx, UnitSpec{Value: int64(h), Unit: "duration-hour", Width: spec.Width})
-		if len(hds) > 0 && policy(ctx).Strict {
-			return finishFormat(ctx, "duration", hour, hds)
+	d -= m * time.Minute
+	s := d / time.Second
+	parts := []string{}
+	diagnostics := []FormatDiagnostic{}
+	subCtx := withoutFormatObserver(ctx)
+	add := func(value int64, unit string) bool {
+		text, ds := f.FormatUnit(subCtx, UnitSpec{Value: value, Unit: unit, Width: spec.Width})
+		if len(ds) > 0 && policy(ctx).Strict {
+			diagnostics = append(diagnostics, ds...)
+			return false
 		}
-		minute, mds := f.FormatUnit(subCtx, UnitSpec{Value: int64(m), Unit: "duration-minute", Width: spec.Width})
-		if len(mds) > 0 && policy(ctx).Strict {
-			return finishFormat(ctx, "duration", minute, mds)
-		}
-		text, lds := f.FormatList(subCtx, ListSpec{
-			Items: []string{hour, minute},
-			Type:  ListUnit,
-			Width: string(spec.Width),
-		})
-		diagnostics := []FormatDiagnostic{fallbackFormatDiagnostic(ctx, "duration", "unsupported_duration_units", string(spec.Width), "info")}
-		diagnostics = append(diagnostics, hds...)
-		diagnostics = append(diagnostics, mds...)
-		diagnostics = append(diagnostics, lds...)
-		return finishFormat(ctx, "duration", text, diagnostics)
+		diagnostics = append(diagnostics, ds...)
+		parts = append(parts, text)
+		return true
 	}
-	text, ds := f.FormatUnit(withoutFormatObserver(ctx), UnitSpec{Value: int64(m), Unit: "duration-minute", Width: spec.Width})
+	if h > 0 && !add(int64(h), "duration-hour") {
+		return finishFormat(ctx, "duration", "", diagnostics)
+	}
+	if m > 0 && !add(int64(m), "duration-minute") {
+		return finishFormat(ctx, "duration", "", diagnostics)
+	}
+	if (h == 0 && m == 0) || s > 0 {
+		if !add(int64(s), "duration-second") {
+			return finishFormat(ctx, "duration", "", diagnostics)
+		}
+	}
+	text, lds := f.FormatList(subCtx, ListSpec{Items: parts, Type: ListUnit, Width: string(spec.Width)})
+	diagnostics = append(diagnostics, lds...)
+	return finishFormat(ctx, "duration", text, diagnostics)
+}
+
+func (f *CLDRFormatter) FormatPeriod(ctx FormatContext, spec PeriodSpec) (string, []FormatDiagnostic) {
+	values := []struct {
+		value int
+		unit  string
+	}{
+		{spec.Value.Years, "duration-year"},
+		{spec.Value.Months, "duration-month"},
+		{spec.Value.Weeks, "duration-week"},
+		{spec.Value.Days, "duration-day"},
+	}
+	sign := 0
+	for _, item := range values {
+		if item.value == 0 {
+			continue
+		}
+		if item.value < 0 {
+			if sign > 0 {
+				return finishFormatFallback(ctx, "period", "invalid_period_mixed_sign", "period fields must have one sign")
+			}
+			sign = -1
+			continue
+		}
+		if sign < 0 {
+			return finishFormatFallback(ctx, "period", "invalid_period_mixed_sign", "period fields must have one sign")
+		}
+		sign = 1
+	}
+	parts := []string{}
+	diagnostics := []FormatDiagnostic{}
+	subCtx := withoutFormatObserver(ctx)
+	for _, item := range values {
+		if item.value == 0 {
+			continue
+		}
+		value := item.value
+		if value < 0 {
+			value = -value
+		}
+		text, ds := f.FormatUnit(subCtx, UnitSpec{Value: value, Unit: item.unit, Width: spec.Width})
+		if len(ds) > 0 && policy(ctx).Strict {
+			return finishFormat(ctx, "period", text, ds)
+		}
+		diagnostics = append(diagnostics, ds...)
+		parts = append(parts, text)
+	}
+	if len(parts) == 0 {
+		text, ds := f.FormatUnit(subCtx, UnitSpec{Value: 0, Unit: "duration-day", Width: spec.Width})
+		return finishFormat(ctx, "period", text, ds)
+	}
+	text, ds := f.FormatList(subCtx, ListSpec{Items: parts, Type: ListUnit, Width: string(spec.Width)})
+	diagnostics = append(diagnostics, ds...)
+	return finishFormat(ctx, "period", text, diagnostics)
+}
+
+func (f *CLDRFormatter) FormatRelative(ctx FormatContext, spec RelativeSpec) (string, []FormatDiagnostic) {
+	value := spec.Value
+	if value < 0 {
+		value = -value
+	}
+	width := spec.Width
+	if width == "" {
+		width = UnitLong
+	}
+	numeric := spec.Numeric
+	if numeric == "" {
+		numeric = RelativeAuto
+	}
+	if numeric == RelativeAuto {
+		offset := relativeOffset(spec.Direction, value)
+		if text, ok := f.data.RelativeSpecial(effectiveFormatTag(ctx).String(), string(spec.Unit), string(width), offset); ok {
+			return finishBoundFormatted(ctx, "relative_time", text)
+		}
+	}
+	category := f.pluralCategory(ctx, value)
+	pattern, ok := f.data.RelativeTimePattern(effectiveFormatTag(ctx).String(), string(spec.Unit), string(width), string(spec.Direction), category)
+	if !ok {
+		if policy(ctx).Strict {
+			return finishFormatFallback(ctx, "relative_time", "relative_time_pattern_unavailable", string(spec.Unit))
+		}
+		if spec.Direction == RelativeFuture {
+			pattern = "in {0} " + string(spec.Unit)
+		} else {
+			pattern = "{0} " + string(spec.Unit) + " ago"
+		}
+	}
+	num, ds := f.FormatNumber(withoutFormatObserver(ctx), NumberSpec{Value: value, Kind: NumberDecimal})
 	if len(ds) > 0 && policy(ctx).Strict {
-		return finishFormat(ctx, "duration", text, ds)
+		return finishFormat(ctx, "relative_time", num, ds)
 	}
-	ds = append([]FormatDiagnostic{fallbackFormatDiagnostic(ctx, "duration", "unsupported_duration_units", string(spec.Width), "info")}, ds...)
-	return finishFormat(ctx, "duration", text, ds)
+	text := strings.ReplaceAll(pattern, "{0}", num)
+	out, bds := boundFormatted(ctx, text, "relative_time")
+	return finishFormat(ctx, "relative_time", out, append(ds, bds...))
+}
+
+func (f *CLDRFormatter) FormatRelativeTime(ctx FormatContext, spec RelativeTimeSpec) (string, []FormatDiagnostic) {
+	loc := spec.TimeZone
+	if loc == nil {
+		loc = ctx.Profile.TimeZone()
+	}
+	target := spec.Target
+	reference := spec.Reference
+	if loc != nil {
+		target = target.In(loc)
+		reference = reference.In(loc)
+	}
+	if days := calendarDayDelta(target, reference); days >= -1 && days <= 1 {
+		dir := RelativeFuture
+		value := int64(days)
+		if value < 0 {
+			dir = RelativePast
+			value = -value
+		}
+		return f.FormatRelative(ctx, RelativeSpec{Value: value, Unit: RelativeDay, Direction: dir, Width: spec.Width, Numeric: spec.Numeric})
+	}
+	delta := target.Sub(reference)
+	dir := RelativeFuture
+	if delta < 0 {
+		dir = RelativePast
+		delta = -delta
+	}
+	unit := RelativeSecond
+	value := int64(math.Round(delta.Seconds()))
+	switch {
+	case delta >= 365*24*time.Hour:
+		unit = RelativeYear
+		value = int64(math.Round(delta.Hours() / (365 * 24)))
+	case delta >= 30*24*time.Hour:
+		unit = RelativeMonth
+		value = int64(math.Round(delta.Hours() / (30 * 24)))
+	case delta >= 7*24*time.Hour:
+		unit = RelativeWeek
+		value = int64(math.Round(delta.Hours() / (7 * 24)))
+	case delta >= 24*time.Hour:
+		unit = RelativeDay
+		value = int64(math.Round(delta.Hours() / 24))
+	case delta >= time.Hour:
+		unit = RelativeHour
+		value = int64(math.Round(delta.Hours()))
+	case delta >= time.Minute:
+		unit = RelativeMinute
+		value = int64(math.Round(delta.Minutes()))
+	}
+	if value < 1 {
+		value = 0
+	}
+	return f.FormatRelative(ctx, RelativeSpec{Value: value, Unit: unit, Direction: dir, Width: spec.Width, Numeric: spec.Numeric})
+}
+
+func (f *CLDRFormatter) FormatDateTimeInterval(ctx FormatContext, spec DateTimeIntervalSpec) (string, []FormatDiagnostic) {
+	if spec.End.Before(spec.Start) {
+		return finishFormatFallback(ctx, "datetime_interval", "invalid_interval_order", "interval end is before start")
+	}
+	startSpec := DateTimeSpec{Value: spec.Start, Kind: spec.Kind, Width: spec.Width, TimeZone: spec.TimeZone, PreserveZone: spec.PreserveZone, Calendar: spec.Calendar}
+	endSpec := DateTimeSpec{Value: spec.End, Kind: spec.Kind, Width: spec.Width, TimeZone: spec.TimeZone, PreserveZone: spec.PreserveZone, Calendar: spec.Calendar}
+	skeleton := intervalSkeleton(spec)
+	field := greatestDifferentField(spec.Start, spec.End, spec.Kind)
+	pattern, ok := f.data.IntervalPattern(effectiveFormatTag(ctx).String(), skeleton, field)
+	if ok {
+		return f.formatIntervalPattern(ctx, spec, pattern)
+	}
+	left, lds := f.FormatDateTime(withoutFormatObserver(ctx), startSpec)
+	right, rds := f.FormatDateTime(withoutFormatObserver(ctx), endSpec)
+	diagnostics := append(lds, rds...)
+	if policy(ctx).Strict && len(diagnostics) > 0 {
+		return finishFormat(ctx, "datetime_interval", "", diagnostics)
+	}
+	if !ok {
+		diagnostics = append(diagnostics, fallbackFormatDiagnostic(ctx, "datetime_interval", "interval_pattern_unavailable", skeleton, "info"))
+	}
+	out, bds := boundFormatted(ctx, left+" – "+right, "datetime_interval")
+	return finishFormat(ctx, "datetime_interval", out, append(diagnostics, bds...))
 }
 
 func (f *CLDRFormatter) localeRecord(tag string) (cldrdata.LocaleRecord, string) {
@@ -690,6 +991,188 @@ func compactMagnitude(v float64) int64 {
 	return mag
 }
 
+func compactPluralValue(v float64, magnitude int64) any {
+	if magnitude <= 0 {
+		return v
+	}
+	return int64(math.Round(math.Abs(v) / compactDivisor("0", magnitude)))
+}
+
+func compactDivisor(pattern string, magnitude int64) float64 {
+	zeros := 0
+	for _, r := range pattern {
+		if r == '0' {
+			zeros++
+		}
+	}
+	if zeros <= 1 {
+		return float64(magnitude)
+	}
+	divisor := float64(magnitude)
+	for i := 1; i < zeros; i++ {
+		divisor /= 10
+	}
+	if divisor < 1 {
+		return 1
+	}
+	return divisor
+}
+
+func compactFractionDigits(pattern string) int {
+	if i := strings.IndexByte(pattern, '.'); i >= 0 {
+		n := 0
+		for _, r := range pattern[i+1:] {
+			if r == '0' || r == '#' {
+				n++
+				continue
+			}
+			break
+		}
+		return n
+	}
+	return 0
+}
+
+func replaceCompactNumber(pattern, num string) string {
+	start := strings.IndexAny(pattern, "0#")
+	if start < 0 {
+		return num + pattern
+	}
+	end := start
+	for end < len(pattern) && (pattern[end] == '0' || pattern[end] == '#' || pattern[end] == '.' || pattern[end] == ',') {
+		end++
+	}
+	return pattern[:start] + num + pattern[end:]
+}
+
+func normalizeCompactWidth(width string) string {
+	switch strings.ToLower(strings.TrimSpace(width)) {
+	case "long":
+		return "long"
+	default:
+		return "short"
+	}
+}
+
+func (f *CLDRFormatter) pluralCategory(ctx FormatContext, value any) string {
+	tag := effectiveFormatTag(ctx)
+	n, err := numberAsFloat(value)
+	if err != nil {
+		return "other"
+	}
+	n = math.Abs(n)
+	i := int(math.Floor(n))
+	if math.Abs(n-float64(i)) > 0.0000001 {
+		return "other"
+	}
+	switch plural.Cardinal.MatchPlural(tag, i, 0, 0, 0, 0) {
+	case plural.Zero:
+		return "zero"
+	case plural.One:
+		return "one"
+	case plural.Two:
+		return "two"
+	case plural.Few:
+		return "few"
+	case plural.Many:
+		return "many"
+	default:
+		return "other"
+	}
+}
+
+func relativeOffset(direction RelativeDirection, value int64) int {
+	if direction == RelativePast {
+		return -int(value)
+	}
+	return int(value)
+}
+
+func calendarDayDelta(target, reference time.Time) int {
+	t := time.Date(target.Year(), target.Month(), target.Day(), 0, 0, 0, 0, target.Location())
+	r := time.Date(reference.Year(), reference.Month(), reference.Day(), 0, 0, 0, 0, reference.Location())
+	return int(t.Sub(r).Hours() / 24)
+}
+
+func intervalSkeleton(spec DateTimeIntervalSpec) string {
+	switch spec.Kind {
+	case TimeOnly:
+		return "Hm"
+	case DateTime:
+		return "yMMMdHm"
+	default:
+		switch strings.ToLower(strings.TrimSpace(spec.Width)) {
+		case "short":
+			return "yMd"
+		case "long", "full":
+			return "yMMMMd"
+		default:
+			return "yMMMd"
+		}
+	}
+}
+
+func greatestDifferentField(start, end time.Time, kind DateTimeKind) string {
+	if kind == TimeOnly {
+		if start.Hour() != end.Hour() {
+			return "H"
+		}
+		return "m"
+	}
+	if start.Year() != end.Year() {
+		return "y"
+	}
+	if start.Month() != end.Month() {
+		return "M"
+	}
+	if start.Day() != end.Day() {
+		return "d"
+	}
+	if kind == DateTime {
+		if start.Hour() != end.Hour() {
+			return "H"
+		}
+		return "m"
+	}
+	return "d"
+}
+
+func (f *CLDRFormatter) formatIntervalPattern(ctx FormatContext, spec DateTimeIntervalSpec, pattern string) (string, []FormatDiagnostic) {
+	start := spec.Start
+	end := spec.End
+	if !spec.PreserveZone {
+		loc := spec.TimeZone
+		if loc == nil {
+			loc = ctx.Profile.TimeZone()
+		}
+		if loc != nil {
+			start = start.In(loc)
+			end = end.In(loc)
+		}
+	}
+	rec, localeUsed := f.localeRecord(effectiveFormatTag(ctx).String())
+	idx := strings.IndexRune(pattern, '–')
+	sepLen := len("–")
+	if idx < 0 {
+		idx = strings.IndexRune(pattern, '-')
+		sepLen = 1
+	}
+	if idx < 0 {
+		left, lds := f.FormatDateTime(withoutFormatObserver(ctx), DateTimeSpec{Value: start, Kind: spec.Kind, Width: spec.Width, TimeZone: spec.TimeZone, PreserveZone: spec.PreserveZone, Calendar: spec.Calendar})
+		right, rds := f.FormatDateTime(withoutFormatObserver(ctx), DateTimeSpec{Value: end, Kind: spec.Kind, Width: spec.Width, TimeZone: spec.TimeZone, PreserveZone: spec.PreserveZone, Calendar: spec.Calendar})
+		return finishFormat(ctx, "datetime_interval", left+" – "+right, append(lds, rds...))
+	}
+	leftPattern := strings.TrimSpace(pattern[:idx])
+	rightPattern := strings.TrimSpace(pattern[idx+sepLen:])
+	sep := pattern[idx : idx+sepLen]
+	text := formatCLDRPattern(start, leftPattern, rec, effectiveFormatTag(ctx)) + sep + formatCLDRPattern(end, rightPattern, rec, effectiveFormatTag(ctx))
+	out, ds := boundFormatted(ctx, text, "datetime_interval")
+	if localeUsed != cldrLookupTag(effectiveFormatTag(ctx).String()) {
+		ds = append(ds, FormatDiagnostic{Code: "format_locale_fallback", Severity: "info", Component: "formatter", Kind: "datetime_interval", Locale: cldrLookupTag(effectiveFormatTag(ctx).String()), FallbackLocale: localeUsed})
+	}
+	return finishFormat(ctx, "datetime_interval", out, ds)
+}
+
 func boundFormatted(ctx FormatContext, text, kind string) (string, []FormatDiagnostic) {
 	max := policy(ctx).MaxFormattedRunes
 	if max <= 0 {
@@ -891,9 +1374,17 @@ func formatCLDRPattern(t time.Time, pattern string, rec cldrdata.LocaleRecord, t
 			writeNumber(t.Second(), minWidth(count))
 		case 'a':
 			if t.Hour() < 12 {
-				b.WriteString("AM")
+				if rec.DayPeriods[0] != "" {
+					b.WriteString(rec.DayPeriods[0])
+				} else {
+					b.WriteString("AM")
+				}
 			} else {
-				b.WriteString("PM")
+				if rec.DayPeriods[1] != "" {
+					b.WriteString(rec.DayPeriods[1])
+				} else {
+					b.WriteString("PM")
+				}
 			}
 		case 'z', 'v', 'V', 'O':
 			b.WriteString(t.Format("MST"))

@@ -43,6 +43,9 @@ func TestGenerateDeterministicAndRelativeMetadata(t *testing.T) {
 	if !bytes.Contains(srcA, []byte(`Tag: "de-CH"`)) || !bytes.Contains(srcA, []byte(`Currency: "CHF"`)) {
 		t.Fatal("generated data missing expected Swiss locale/defaults")
 	}
+	if !hasUsefulSizeRow(a.SizeReport, "generated_go") || !hasUsefulSizeRow(a.SizeReport, "currency_symbols") {
+		t.Fatalf("size report missing expected footprint rows: %#v", a.SizeReport)
+	}
 }
 
 func TestGeneratePackFromNormalizedModel(t *testing.T) {
@@ -77,6 +80,21 @@ func TestGeneratePackFromNormalizedModel(t *testing.T) {
 	}
 }
 
+func TestModelSizeReportIncludesPackSizes(t *testing.T) {
+	rows := modelSizeReport(model{
+		rawRows: map[string]int{"currency_symbols": 1},
+		symbols: []currencySymbol{{
+			Locale: "de-CH",
+			Code:   "EUR",
+			Symbol: "EUR",
+			Narrow: "EUR",
+		}},
+	}, 123, 45, packFootprint{RawBytes: 67, ZstdBytes: 89})
+	if !hasUsefulSizeRow(rows, "generated_go") || !hasUsefulSizeRow(rows, "currency_symbols") || !hasUsefulSizeRow(rows, "cldrpack_raw") || !hasUsefulSizeRow(rows, "cldrpack_zstd") {
+		t.Fatalf("size report missing expected rows: %#v", rows)
+	}
+}
+
 func repoRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
@@ -106,6 +124,23 @@ func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
 			return true
+		}
+	}
+	return false
+}
+
+func hasUsefulSizeRow(rows []SizeRow, domain string) bool {
+	for _, row := range rows {
+		if row.Domain != domain {
+			continue
+		}
+		switch domain {
+		case "generated_go":
+			return row.SourceBytes > 0
+		case "cldrpack_raw", "cldrpack_zstd":
+			return row.EncodedBytes > 0
+		default:
+			return row.Rows > 0 && row.RawRows >= row.Rows && row.SourceBytes > 0 && row.EncodedBytes > 0 && row.UniqueStrings > 0
 		}
 	}
 	return false

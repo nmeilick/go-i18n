@@ -9,7 +9,7 @@ import (
 	"github.com/nmeilick/go-i18n/locale/cldr"
 )
 
-func TestBuiltinLeanServicesMatchDefaultFormatter(t *testing.T) {
+func TestBuiltinServicesMatchDefaultFormatter(t *testing.T) {
 	svc, err := cldr.NewServices()
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +36,7 @@ func TestBuiltinLeanServicesMatchDefaultFormatter(t *testing.T) {
 }
 
 func TestComposeRejectsAuthoritativeOverlap(t *testing.T) {
-	_, err := cldr.Compose([]cldr.Bundle{cldr.BuiltinLean(), cldr.BuiltinLean()})
+	_, err := cldr.Compose([]cldr.Bundle{cldr.Builtin(), cldr.Builtin()})
 	if err == nil {
 		t.Fatal("expected overlap error")
 	}
@@ -48,7 +48,7 @@ func TestComposeRejectsAuthoritativeOverlap(t *testing.T) {
 
 func TestComposeReplacementAndDependencyOverlap(t *testing.T) {
 	replaced, err := cldr.Compose(
-		[]cldr.Bundle{cldr.BuiltinLean(), cldr.BuiltinLean()},
+		[]cldr.Bundle{cldr.Builtin(), cldr.Builtin()},
 		cldr.WithAuthoritativeReplacement(),
 	)
 	if err != nil {
@@ -57,7 +57,7 @@ func TestComposeReplacementAndDependencyOverlap(t *testing.T) {
 	if got := replaced.Info().Mode; got != "composed" {
 		t.Fatalf("mode = %q", got)
 	}
-	base := cldr.BuiltinLean()
+	base := cldr.Builtin()
 	info := base.Info()
 	info.ID = "dependency-only"
 	dep, err := cldr.NewBundle(info, []cldr.Coverage{{
@@ -99,7 +99,7 @@ func TestServicesClosedFormatterDiagnostics(t *testing.T) {
 }
 
 func TestBundleInfoIsDefensivelyCopied(t *testing.T) {
-	b := cldr.BuiltinLean()
+	b := cldr.Builtin()
 	info := b.Info()
 	if len(info.Locales) == 0 {
 		t.Fatal("expected locales")
@@ -111,7 +111,7 @@ func TestBundleInfoIsDefensivelyCopied(t *testing.T) {
 }
 
 func TestSelectionExpandsLanguagesAndFeatures(t *testing.T) {
-	bundle, plan, err := cldr.SelectBundle(cldr.BuiltinLean(), cldr.Selection{
+	bundle, plan, err := cldr.SelectBundle(cldr.Builtin(), cldr.Selection{
 		Languages: []string{"de"},
 		Features:  []cldr.FeatureID{cldr.FeatureDatesGregorianPatterns, cldr.FeatureCurrenciesFractions},
 	})
@@ -133,7 +133,7 @@ func TestSelectionExpandsLanguagesAndFeatures(t *testing.T) {
 }
 
 func TestSelectionRejectsUnavailableFeature(t *testing.T) {
-	_, _, err := cldr.SelectBundle(cldr.BuiltinLean(), cldr.Selection{Features: []cldr.FeatureID{cldr.FeatureUnitsPatterns}})
+	_, _, err := cldr.SelectBundle(cldr.Builtin(), cldr.Selection{Features: []cldr.FeatureID{cldr.FeatureTimeZonesNames}})
 	if err == nil {
 		t.Fatal("expected unsupported feature")
 	}

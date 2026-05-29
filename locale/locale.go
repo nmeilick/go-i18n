@@ -388,9 +388,10 @@ type Profile struct {
 
 // FormatDefaults carries optional formatting defaults.
 type FormatDefaults struct {
-	DateStyle     string
-	TimeStyle     string
-	CurrencyStyle string
+	DateStyle          string
+	TimeStyle          string
+	CurrencyDisplay    CurrencyDisplayMode
+	CurrencyAccounting bool
 }
 
 // ProfileOption configures a profile.
@@ -422,9 +423,9 @@ func NewProfileTags(languages []language.Tag, opts ...ProfileOption) (Profile, e
 		timeZone:  time.UTC,
 		calendar:  defaultCalendar,
 		defaults: FormatDefaults{
-			DateStyle:     "medium",
-			TimeStyle:     "medium",
-			CurrencyStyle: "standard",
+			DateStyle:       "medium",
+			TimeStyle:       "medium",
+			CurrencyDisplay: CurrencyDisplaySymbol,
 		},
 	}
 	for _, opt := range opts {

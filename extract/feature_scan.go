@@ -459,14 +459,6 @@ func scanFeatureFile(pkg goPackage, path string, opts FeatureScanOptions) ([]Fea
 				if features, ok := builtinFeatureSymbols(symbol); ok {
 					addUsage(n.Pos(), symbol, "known_api", features)
 				}
-				if symbol == opts.I18NModulePath+"/i18n.Compact" || symbol == "Compact" {
-					pos := fset.Position(n.Pos())
-					warnings = append(warnings, FeatureScanWarning{
-						Code: "unsupported_compact_decimal", Package: pkg.ImportPath,
-						Path: filepath.ToSlash(path), Line: pos.Line,
-						Message: "compact decimal data is not available in the lean CLDR bundle",
-					})
-				}
 				for _, rule := range opts.Rules {
 					if ruleMatches(rule.Target, symbol) {
 						addUsage(n.Pos(), symbol, "wrapper_rule", rule.Features)
@@ -522,11 +514,48 @@ func formatterMethodFeatures(method string) ([]cldr.FeatureID, bool) {
 			cldr.FeatureNumbersSymbols,
 			cldr.FeatureCurrenciesFractions,
 			cldr.FeatureCurrenciesSymbols,
+			cldr.FeatureCurrenciesNarrowSymbols,
 		}, true
 	case "FormatDateTime":
-		return []cldr.FeatureID{cldr.FeatureDatesGregorianPatterns, cldr.FeatureDatesGregorianNames}, true
+		return []cldr.FeatureID{
+			cldr.FeatureDatesGregorianPatterns,
+			cldr.FeatureDatesGregorianNames,
+			cldr.FeatureDatesGregorianDayPeriods,
+		}, true
+	case "FormatDateTimeInterval":
+		return []cldr.FeatureID{
+			cldr.FeatureDatesGregorianPatterns,
+			cldr.FeatureDatesGregorianNames,
+			cldr.FeatureDatesGregorianDayPeriods,
+			cldr.FeatureDatesGregorianIntervals,
+		}, true
+	case "FormatList":
+		return []cldr.FeatureID{cldr.FeatureListsPatterns}, true
+	case "FormatUnit":
+		return []cldr.FeatureID{cldr.FeatureNumbersDecimal, cldr.FeatureNumbersSymbols, cldr.FeaturePluralsCardinal, cldr.FeatureUnitsDurationCore}, true
 	case "FormatDuration":
-		return []cldr.FeatureID{cldr.FeatureNumbersDecimal, cldr.FeatureNumbersSymbols}, true
+		return []cldr.FeatureID{
+			cldr.FeatureNumbersDecimal,
+			cldr.FeatureNumbersSymbols,
+			cldr.FeatureListsPatterns,
+			cldr.FeaturePluralsCardinal,
+			cldr.FeatureUnitsDurationCore,
+		}, true
+	case "FormatPeriod":
+		return []cldr.FeatureID{
+			cldr.FeatureNumbersDecimal,
+			cldr.FeatureNumbersSymbols,
+			cldr.FeatureListsPatterns,
+			cldr.FeaturePluralsCardinal,
+			cldr.FeatureUnitsDurationCore,
+		}, true
+	case "FormatRelative", "FormatRelativeTime":
+		return []cldr.FeatureID{
+			cldr.FeatureNumbersDecimal,
+			cldr.FeatureNumbersSymbols,
+			cldr.FeaturePluralsCardinal,
+			cldr.FeatureDatesRelativeTime,
+		}, true
 	}
 	return nil, false
 }
@@ -627,38 +656,102 @@ func builtinFeatureMap() map[string][]cldr.FeatureID {
 		cldr.FeatureNumbersSymbols,
 		cldr.FeatureCurrenciesFractions,
 		cldr.FeatureCurrenciesSymbols,
+		cldr.FeatureCurrenciesNarrowSymbols,
 	}
-	datetime := []cldr.FeatureID{cldr.FeatureDatesGregorianPatterns, cldr.FeatureDatesGregorianNames}
+	datetime := []cldr.FeatureID{
+		cldr.FeatureDatesGregorianPatterns,
+		cldr.FeatureDatesGregorianNames,
+		cldr.FeatureDatesGregorianDayPeriods,
+	}
+	compact := []cldr.FeatureID{
+		cldr.FeatureNumbersDecimal,
+		cldr.FeatureNumbersSymbols,
+		cldr.FeaturePluralsCardinal,
+		cldr.FeatureNumbersCompactDecimal,
+	}
+	list := []cldr.FeatureID{cldr.FeatureListsPatterns}
+	duration := []cldr.FeatureID{
+		cldr.FeatureNumbersDecimal,
+		cldr.FeatureNumbersSymbols,
+		cldr.FeatureListsPatterns,
+		cldr.FeaturePluralsCardinal,
+		cldr.FeatureUnitsDurationCore,
+	}
+	relative := []cldr.FeatureID{
+		cldr.FeatureNumbersDecimal,
+		cldr.FeatureNumbersSymbols,
+		cldr.FeaturePluralsCardinal,
+		cldr.FeatureDatesRelativeTime,
+	}
+	interval := append(append([]cldr.FeatureID{}, datetime...), cldr.FeatureDatesGregorianIntervals)
+	displayNames := []cldr.FeatureID{
+		cldr.FeatureDisplayNamesLanguages,
+		cldr.FeatureDisplayNamesTerritories,
+		cldr.FeatureDisplayNamesScripts,
+		cldr.FeatureDisplayNamesCalendars,
+	}
 	profile := []cldr.FeatureID{cldr.FeatureProfileDefaults, cldr.FeatureBCP47Extensions}
 	return map[string][]cldr.FeatureID{
-		defaultI18NModule + "/i18n.Number":              number,
-		defaultI18NModule + "/i18n.Percent":             percent,
-		defaultI18NModule + "/i18n.Currency":            currency,
-		defaultI18NModule + "/i18n.Date":                datetime,
-		defaultI18NModule + "/i18n.Time":                datetime,
-		defaultI18NModule + "/i18n.DateTime":            datetime,
-		defaultI18NModule + "/i18n.Duration":            number,
-		defaultI18NModule + "/i18n.Unit":                number,
-		defaultI18NModule + "/locale.NumberSpec":        number,
-		defaultI18NModule + "/locale.CurrencySpec":      currency,
-		defaultI18NModule + "/locale.DateTimeSpec":      datetime,
-		defaultI18NModule + "/locale.DurationSpec":      number,
-		defaultI18NModule + "/locale.NewResolver":       profile,
-		defaultI18NModule + "/locale.GeneratedDefaults": profile,
-		"i18n.Number":              number,
-		"i18n.Percent":             percent,
-		"i18n.Currency":            currency,
-		"i18n.Date":                datetime,
-		"i18n.Time":                datetime,
-		"i18n.DateTime":            datetime,
-		"i18n.Duration":            number,
-		"i18n.Unit":                number,
-		"locale.NumberSpec":        number,
-		"locale.CurrencySpec":      currency,
-		"locale.DateTimeSpec":      datetime,
-		"locale.DurationSpec":      number,
-		"locale.NewResolver":       profile,
-		"locale.GeneratedDefaults": profile,
+		defaultI18NModule + "/i18n.Number":                 number,
+		defaultI18NModule + "/i18n.Percent":                percent,
+		defaultI18NModule + "/i18n.Compact":                compact,
+		defaultI18NModule + "/i18n.Currency":               currency,
+		defaultI18NModule + "/i18n.Date":                   datetime,
+		defaultI18NModule + "/i18n.Time":                   datetime,
+		defaultI18NModule + "/i18n.DateTime":               datetime,
+		defaultI18NModule + "/i18n.DateInterval":           interval,
+		defaultI18NModule + "/i18n.TimeInterval":           interval,
+		defaultI18NModule + "/i18n.DateTimeInterval":       interval,
+		defaultI18NModule + "/i18n.Duration":               duration,
+		defaultI18NModule + "/i18n.Period":                 duration,
+		defaultI18NModule + "/i18n.Relative":               relative,
+		defaultI18NModule + "/i18n.RelativeTime":           relative,
+		defaultI18NModule + "/i18n.List":                   list,
+		defaultI18NModule + "/i18n.Unit":                   duration,
+		defaultI18NModule + "/locale.NumberSpec":           number,
+		defaultI18NModule + "/locale.CurrencySpec":         currency,
+		defaultI18NModule + "/locale.DateTimeSpec":         datetime,
+		defaultI18NModule + "/locale.DateTimeIntervalSpec": interval,
+		defaultI18NModule + "/locale.ListSpec":             list,
+		defaultI18NModule + "/locale.UnitSpec":             duration,
+		defaultI18NModule + "/locale.DurationSpec":         duration,
+		defaultI18NModule + "/locale.PeriodSpec":           duration,
+		defaultI18NModule + "/locale.RelativeSpec":         relative,
+		defaultI18NModule + "/locale.RelativeTimeSpec":     relative,
+		defaultI18NModule + "/locale.NewResolver":          profile,
+		defaultI18NModule + "/locale.GeneratedDefaults":    profile,
+		defaultI18NModule + "/locale.DisplayNames":         displayNames,
+		defaultI18NModule + "/locale.NewDisplayNames":      displayNames,
+		"i18n.Number":                 number,
+		"i18n.Percent":                percent,
+		"i18n.Compact":                compact,
+		"i18n.Currency":               currency,
+		"i18n.Date":                   datetime,
+		"i18n.Time":                   datetime,
+		"i18n.DateTime":               datetime,
+		"i18n.DateInterval":           interval,
+		"i18n.TimeInterval":           interval,
+		"i18n.DateTimeInterval":       interval,
+		"i18n.Duration":               duration,
+		"i18n.Period":                 duration,
+		"i18n.Relative":               relative,
+		"i18n.RelativeTime":           relative,
+		"i18n.List":                   list,
+		"i18n.Unit":                   duration,
+		"locale.NumberSpec":           number,
+		"locale.CurrencySpec":         currency,
+		"locale.DateTimeSpec":         datetime,
+		"locale.DateTimeIntervalSpec": interval,
+		"locale.ListSpec":             list,
+		"locale.UnitSpec":             duration,
+		"locale.DurationSpec":         duration,
+		"locale.PeriodSpec":           duration,
+		"locale.RelativeSpec":         relative,
+		"locale.RelativeTimeSpec":     relative,
+		"locale.NewResolver":          profile,
+		"locale.GeneratedDefaults":    profile,
+		"locale.DisplayNames":         displayNames,
+		"locale.NewDisplayNames":      displayNames,
 	}
 }
 

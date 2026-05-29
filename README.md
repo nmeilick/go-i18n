@@ -1,7 +1,21 @@
 # go-i18n
 
-Internationalization for Go apps with gettext catalogs, locale-aware formatting, HTTP localization, and translation
-workflow tooling.
+go-i18n helps Go applications internationalize user-facing output across the whole app: web responses, CLIs, background
+jobs, emails, PDFs, and logs meant for users. It combines gettext catalogs, locale negotiation, per-request locale
+profiles, and typed formatting for numbers, currencies, percentages, dates, times, durations, lists, relative time,
+intervals, compact numbers, and display names.
+
+The same application message can render through different locale profiles:
+
+```text
+en-US  Invoice INV-1042: $1,234.50 due May 16, 2026 at 2:30 PM; 74% paid.
+en-GB  Invoice INV-1042: £1,234.50 due 16 May 2026 at 14:30; 74% paid.
+de-CH  Rechnung INV-1042: EUR 1’234.50 fällig am 16.05.2026 um 14:30; 74% bezahlt.
+fr-FR  Facture INV-1042 : 1 234,50 € à régler le 16 mai 2026 à 14:30 ; 74 % payé.
+ja-JP  請求書 INV-1042: ￥1,234 の支払期限は 2026/05/16 14:30、支払済み 74%
+ko-KR  청구서 INV-1042: ₩1,234 결제 기한 2026. 5. 16. 오후 2:30; 74% 결제됨
+th-TH  ใบแจ้งหนี้ INV-1042: ฿1,234.50 ครบกำหนด 16 พ.ค. 2026 เวลา 14:30; ชำระแล้ว 74%
+```
 
 ## What You Get
 - Core translation runtime with immutable catalogs, localizers, domains, `T/Tn/Tc/Tnc`, checked lookup, and named
@@ -9,10 +23,11 @@ workflow tooling.
 - Gettext PO/POT parsing, loading, validation, merging, formatting, and stale-entry checks.
 - Locale negotiation, profile resolution, timezone/currency/region preferences, and locale-aware sort/search/case
   helpers.
-- Typed number, currency, percent, date, time, duration, list, and unit formatting through the localizer profile.
+- Typed number, currency, percent, date, time, duration, period, list, compact-number, relative-time, and interval
+  formatting through the localizer profile.
 - `net/http` middleware plus small API payload helpers for localized messages.
 - `lingo`, a workflow CLI for extraction, catalog updates, CI checks, and CLDR data maintenance.
-- Generated CLDR data for core formatting and profile defaults included in the module.
+- Generated all-locale CLDR core data for ordinary app formatting and profile defaults included in the module.
 - Dependency-light observability events for missing translations, fallback lookups, resolver warnings, and formatter
   diagnostics.
 
@@ -27,21 +42,6 @@ For the workflow CLI:
 
 ```sh
 go install github.com/nmeilick/go-i18n/cmd/lingo@latest
-```
-
-Repository development uses the Go version in [go.mod](go.mod):
-
-```sh
-make help
-make test
-make build
-bin/lingo version
-```
-
-Expected local build output:
-
-```text
-lingo dev (<commit>, <date>)
 ```
 
 ## Quick Start
@@ -122,7 +122,7 @@ The comprehensive checkout example runs a request through `web.Middleware` and p
 HTTP 200
 Content-Language: de
 Vary: Accept-Language
-{"locale":"de","resolved_source":"accept-language","greeting":"Hallo Ada","order":"Bestellung A-1042","total":"Summe: 1.499,95 €",...}
+{"locale":"de","resolved_source":"accept-language","greeting":"Hallo Ada","order":"Bestellung A-1042","total":"Summe: 1.499,95 €","delivery":"Lieferdatum: 16.05.2026","items":"3 Artikel bereit","button":"Jetzt bezahlen","status":"Zahlung ausstehend","field_error":{"field":"email","path":"checkout.email","code":"required","message":{"text":"E-Mail ist erforderlich","locale":"de"}},"missing_status":"missing","formatter_issues":1,"observed_events":2}
 ```
 
 For a guided feature tour, run the interactive terminal showcase in [examples/showcase](examples/showcase). It combines
@@ -207,6 +207,9 @@ state.
 Profiles carry language, timezone, display currency, numbering, calendar, measurement, and region preferences for one
 request, job, or operation. Typed interpolation values render through the bound profile.
 
+This example uses a Swiss profile with a euro invoice total. The profile controls formatting preferences; the amount
+still carries its real currency.
+
 ```go
 profile, err := locale.NewProfile(
 	[]string{"de-CH"},
@@ -222,7 +225,10 @@ tr := rt.Translator(profile)
 due := time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC)
 
 text := tr.T("Total {amount} due {date}", i18n.Vars{
-	"amount": i18n.Currency(1234.5, i18n.CurrencyCode(locale.Currency("CHF"))),
+	"amount": i18n.Currency(
+		1234.5,
+		i18n.CurrencyCode(locale.Currency("EUR")),
+	),
 	"date":   i18n.Date(due, i18n.Style("medium")),
 })
 ```
@@ -230,7 +236,7 @@ text := tr.T("Total {amount} due {date}", i18n.Vars{
 Typical output:
 
 ```text
-Total CHF 1'234.50 due 16.05.2026
+Total EUR 1’234.50 due 16.05.2026
 ```
 
 Available typed values:
@@ -240,15 +246,22 @@ Available typed values:
 | Number | `i18n.Number(1234.5, i18n.FractionDigits(1))` |
 | Percent | `i18n.Percent(0.74)` |
 | Currency | `i18n.Currency(1234.5, i18n.CurrencyCode(locale.Currency("EUR")))` |
+| Compact number | `i18n.Number(1200000, i18n.Compact(locale.UnitShort))` |
 | Date | `i18n.Date(t, i18n.Style("medium"))` |
 | Time | `i18n.Time(t, i18n.Style("short"))` |
 | DateTime | `i18n.DateTime(t, i18n.Style("long"))` |
 | Duration | `i18n.Duration(90 * time.Minute)` |
+| Period | `i18n.Period(locale.Period{Years: 1, Months: 2, Days: 3})` |
+| Relative time | `i18n.RelativeTime(target, reference)` |
+| Date/time interval | `i18n.DateTimeInterval(start, end, i18n.Style("medium"))` |
 | List | `i18n.List([]any{"Catalogs", "Profiles", "Formatting"})` |
-| Unit | `i18n.Unit(13, "kilometer")` |
+| Duration unit | `i18n.Unit(13, "duration-hour")` |
 
 Currency is not inferred from language alone. Pass the real financial currency with `i18n.CurrencyCode`; profile currency
 is only a display/default preference.
+
+Currency display is separate from the amount currency. `i18n.CurrencyDisplay(i18n.CurrencyDisplayNarrowSymbol)` requests
+CLDR's narrow form for the locale, and falls back to the standard symbol when CLDR does not provide a shorter form.
 
 Use `locale.Resolver` when the application has multiple signals:
 
@@ -399,6 +412,7 @@ What the commands do:
 | `lingo stale` | Report active locale entries that are no longer extracted from source. |
 | `lingo data sources` | Print CLDR source metadata and checksums. |
 | `lingo data check` | Verify generated CLDR data is current. |
+| `lingo data footprint` | Measure generated CLDR data size by domain, including raw and zstd `.cldrpack` sizes. |
 | `lingo data diff` | Show which generated CLDR files would change. |
 | `lingo data update --dry-run` | Preview a CLDR data update without writing files. |
 
@@ -415,6 +429,7 @@ data from local CLDR assets with `lingo`; the source and checksums are recorded 
 ```sh
 lingo data sources
 lingo data check
+lingo data footprint
 lingo data diff
 lingo data update --dry-run
 lingo data update
@@ -422,6 +437,17 @@ lingo data update
 
 The update command uses the configured CLDR source directory, normally `assets/cldr-json-48.2.0`, and writes changes
 atomically.
+
+The built-in bundle is the default CLDR core for normal application output: locale/profile defaults, number symbols,
+currency fractions, standard and narrow currency symbols, Gregorian date/time names and patterns, day periods, list
+patterns, cardinal plurals, compact decimals, duration-core unit patterns, relative time, Gregorian intervals, display
+names for languages/territories/scripts/calendars, and BCP-47 extension metadata. Specialist domains such as full unit
+patterns, full timezone names, currency display names, non-Gregorian calendar formatting, ordinal rules, RBNF/spellout,
+annotations, transforms, subdivisions, and person names are intentionally outside the default bundle.
+
+For the current CLDR 48 data set, the generated Go source is 20,407,518 bytes against a 25,165,824 byte budget. The same
+default core measures 11,383,388 bytes as a raw `.cldrpack` and 1,912,020 bytes as a zstd `.cldrpack`. Use
+`lingo --json data footprint` for the per-domain row, source-byte, encoded-byte, and unique-string report.
 
 ## Locale-Aware Text
 The `locale` package also exposes helpers over `golang.org/x/text`:
@@ -472,8 +498,8 @@ to their own observability stack.
 - No HTML-safe output from plain `T` APIs.
 - No forced API error envelope.
 - No automatic financial currency inference.
-- No CLDR list/unit patterns, compact decimals, plural-rule tables, localized display names, or full timezone names in
-  the current generated formatting data.
+- No full unit catalog, full timezone names, currency display names, non-Gregorian calendar formatting, ordinal rules,
+  RBNF/spellout, annotations, transforms, subdivisions, or person names in the default generated data.
 
 ## Development
 Repository developer commands:
@@ -486,6 +512,9 @@ make lint
 make build
 make vuln
 ```
+
+`make lint` runs staticcheck with the `staticcheck` build tag, which replaces the generated CLDR literal tables with a
+small type-checking stub. Normal builds, tests, and `lingo data check` use the full generated data.
 
 ## Troubleshooting
 `lingo check --strict` says catalogs are stale:

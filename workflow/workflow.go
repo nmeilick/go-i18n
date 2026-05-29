@@ -70,7 +70,7 @@ func DefaultConfig() Config {
 	cfg.Data.SourceDir = cldrgen.DefaultSourceDir
 	cfg.Data.LockFile = cldrgen.DefaultLockPath
 	cfg.Data.OutputFile = cldrgen.DefaultOutput
-	cfg.Data.SizeBudgetBytes = 2 << 20
+	cfg.Data.SizeBudgetBytes = cldrgen.DefaultSizeBudget
 	return cfg
 }
 
@@ -184,20 +184,21 @@ type Report struct {
 
 // DataReport describes generated CLDR data state.
 type DataReport struct {
-	Version         int      `json:"version"`
-	SourceDir       string   `json:"source_dir"`
-	LockFile        string   `json:"lock_file"`
-	OutputFile      string   `json:"output_file"`
-	CLDRVersion     string   `json:"cldr_version"`
-	UnicodeVersion  string   `json:"unicode_version"`
-	TreeSHA256      string   `json:"tree_sha256"`
-	Generator       string   `json:"generator"`
-	FeatureSet      []string `json:"feature_set"`
-	Changed         []string `json:"changed,omitempty"`
-	OutputBytes     int      `json:"output_bytes,omitempty"`
-	SizeBudgetBytes int64    `json:"size_budget_bytes,omitempty"`
-	SizeBudgetOK    bool     `json:"size_budget_ok"`
-	DryRun          bool     `json:"dry_run,omitempty"`
+	Version         int               `json:"version"`
+	SourceDir       string            `json:"source_dir"`
+	LockFile        string            `json:"lock_file"`
+	OutputFile      string            `json:"output_file"`
+	CLDRVersion     string            `json:"cldr_version"`
+	UnicodeVersion  string            `json:"unicode_version"`
+	TreeSHA256      string            `json:"tree_sha256"`
+	Generator       string            `json:"generator"`
+	FeatureSet      []string          `json:"feature_set"`
+	Changed         []string          `json:"changed,omitempty"`
+	OutputBytes     int               `json:"output_bytes,omitempty"`
+	SizeReport      []cldrgen.SizeRow `json:"size_report,omitempty"`
+	SizeBudgetBytes int64             `json:"size_budget_bytes,omitempty"`
+	SizeBudgetOK    bool              `json:"size_budget_ok"`
+	DryRun          bool              `json:"dry_run,omitempty"`
 }
 
 // ErrDataStale reports generated data that differs from local CLDR assets.
@@ -395,6 +396,16 @@ func (w *Workflow) DataDiff(ctx context.Context) (DataReport, error) {
 	return dataReport(opts, result, false), nil
 }
 
+// DataFootprint reports generated source and optional compact pack sizes.
+func (w *Workflow) DataFootprint(ctx context.Context) (DataReport, error) {
+	opts := w.dataOptions()
+	result, err := cldrgen.MeasureFootprint(ctx, opts)
+	if err != nil {
+		return dataReport(opts, result, false), err
+	}
+	return dataReport(opts, result, false), nil
+}
+
 // DataUpdate regenerates generated CLDR data. With dryRun it writes only to a
 // temporary directory inside cldrgen and returns ErrDataStale when changes are needed.
 func (w *Workflow) DataUpdate(ctx context.Context, dryRun, force bool) (DataReport, error) {
@@ -505,6 +516,7 @@ func dataReport(opts cldrgen.Options, result cldrgen.Result, dryRun bool) DataRe
 		CLDRVersion: lock.CLDRVersion, UnicodeVersion: lock.UnicodeVersion, TreeSHA256: lock.TreeSHA256,
 		Generator: lock.Generator, FeatureSet: append([]string(nil), lock.FeatureSet...),
 		Changed: append([]string(nil), result.Changed...), OutputBytes: result.OutputBytes,
+		SizeReport:      append([]cldrgen.SizeRow(nil), result.SizeReport...),
 		SizeBudgetBytes: result.SizeBudget, SizeBudgetOK: result.SizeBudgetOK, DryRun: dryRun,
 	}
 }

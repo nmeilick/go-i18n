@@ -53,13 +53,12 @@ func Precision(n int) NumberOption {
 	return func(c *locale.NumberSpec) { c.Precision = &n }
 }
 
-// Compact requests compact decimal formatting. The built-in formatter falls
-// back to localized decimal formatting unless a richer data provider is used.
-func Compact(width ...string) NumberOption {
+// Compact requests compact decimal formatting.
+func Compact(width ...locale.UnitWidth) NumberOption {
 	return func(c *locale.NumberSpec) {
 		c.Kind = locale.NumberCompact
 		if len(width) > 0 {
-			c.CompactDisplayName = width[0]
+			c.CompactDisplayName = string(width[0])
 		}
 	}
 }
@@ -75,19 +74,22 @@ func CurrencyCode(code locale.CurrencyCode) CurrencyOption {
 	}
 }
 
-// CurrencyStyle sets a currency style: standard, code, or accounting.
-func CurrencyStyle(style string) CurrencyOption {
-	return func(c *locale.CurrencySpec) {
-		switch strings.TrimSpace(style) {
-		case "code":
-			c.Display = "code"
-		case "accounting":
-			c.Accounting = true
-		default:
-			c.Display = "symbol"
-			c.Accounting = false
-		}
-	}
+type CurrencyDisplayMode = locale.CurrencyDisplayMode
+
+const (
+	CurrencyDisplaySymbol       = locale.CurrencyDisplaySymbol
+	CurrencyDisplayNarrowSymbol = locale.CurrencyDisplayNarrowSymbol
+	CurrencyDisplayCode         = locale.CurrencyDisplayCode
+)
+
+// CurrencyDisplay selects symbol, narrow symbol, or currency code rendering.
+func CurrencyDisplay(mode CurrencyDisplayMode) CurrencyOption {
+	return func(c *locale.CurrencySpec) { c.Display = locale.CurrencyDisplayMode(mode) }
+}
+
+// CurrencyAccounting uses the locale accounting pattern for negative amounts.
+func CurrencyAccounting() CurrencyOption {
+	return func(c *locale.CurrencySpec) { c.Accounting = true }
 }
 
 // CurrencyFractionDigits overrides currency fraction digits.
@@ -103,7 +105,7 @@ func CashDigits() CurrencyOption {
 // Currency formats a currency amount using an explicit code or, when policy
 // allows it, the profile display currency.
 func Currency(v any, opts ...CurrencyOption) Value {
-	spec := locale.CurrencySpec{Value: v, Display: "symbol", CodeSource: locale.CurrencyProfile}
+	spec := locale.CurrencySpec{Value: v, Display: locale.CurrencyDisplaySymbol, CodeSource: locale.CurrencyProfile}
 	for _, opt := range opts {
 		opt(&spec)
 	}
@@ -158,6 +160,21 @@ func DateTime(t time.Time, opts ...TimeOption) Value {
 	return timeValue(t, locale.DateTime, opts...)
 }
 
+// DateInterval formats a localized date range.
+func DateInterval(start, end time.Time, opts ...TimeOption) Value {
+	return intervalValue(start, end, locale.DateOnly, opts...)
+}
+
+// TimeInterval formats a localized time range.
+func TimeInterval(start, end time.Time, opts ...TimeOption) Value {
+	return intervalValue(start, end, locale.TimeOnly, opts...)
+}
+
+// DateTimeInterval formats a localized datetime range.
+func DateTimeInterval(start, end time.Time, opts ...TimeOption) Value {
+	return intervalValue(start, end, locale.DateTime, opts...)
+}
+
 func timeValue(t time.Time, kind locale.DateTimeKind, opts ...TimeOption) Value {
 	spec := locale.DateTimeSpec{Value: t, Kind: kind, Width: "medium", Calendar: "gregory"}
 	for _, opt := range opts {
@@ -168,10 +185,104 @@ func timeValue(t time.Time, kind locale.DateTimeKind, opts ...TimeOption) Value 
 	})
 }
 
-// Duration formats an elapsed duration conservatively.
-func Duration(d time.Duration) Value {
+func intervalValue(start, end time.Time, kind locale.DateTimeKind, opts ...TimeOption) Value {
+	spec := locale.DateTimeIntervalSpec{Start: start, End: end, Kind: kind, Width: "medium", Calendar: "gregory"}
+	tmp := locale.DateTimeSpec{Value: start, Kind: kind, Width: spec.Width, TimeZone: spec.TimeZone, PreserveZone: spec.PreserveZone, Calendar: spec.Calendar}
+	for _, opt := range opts {
+		opt(&tmp)
+	}
+	spec.Width = tmp.Width
+	spec.TimeZone = tmp.TimeZone
+	spec.PreserveZone = tmp.PreserveZone
+	spec.Calendar = tmp.Calendar
 	return valueFunc(func(ctx locale.FormatContext, formatter locale.Formatter) (string, []locale.FormatDiagnostic) {
-		return formatter.FormatDuration(ctx, locale.DurationSpec{Value: d, Width: locale.UnitLong})
+		return formatter.FormatDateTimeInterval(ctx, spec)
+	})
+}
+
+// DurationOption configures elapsed duration formatting.
+type DurationOption func(*locale.DurationSpec)
+
+// DurationWidth sets long, short, or narrow duration width.
+func DurationWidth(width locale.UnitWidth) DurationOption {
+	return func(c *locale.DurationSpec) { c.Width = width }
+}
+
+// Duration formats an elapsed duration conservatively.
+func Duration(d time.Duration, opts ...DurationOption) Value {
+	spec := locale.DurationSpec{Value: d, Width: locale.UnitLong}
+	for _, opt := range opts {
+		opt(&spec)
+	}
+	return valueFunc(func(ctx locale.FormatContext, formatter locale.Formatter) (string, []locale.FormatDiagnostic) {
+		return formatter.FormatDuration(ctx, spec)
+	})
+}
+
+// PeriodOption configures calendar-style period formatting.
+type PeriodOption func(*locale.PeriodSpec)
+
+// PeriodWidth sets long, short, or narrow period unit width.
+func PeriodWidth(width locale.UnitWidth) PeriodOption {
+	return func(c *locale.PeriodSpec) { c.Width = width }
+}
+
+// Period formats a caller-supplied calendar-style period.
+func Period(p locale.Period, opts ...PeriodOption) Value {
+	spec := locale.PeriodSpec{Value: p, Width: locale.UnitLong}
+	for _, opt := range opts {
+		opt(&spec)
+	}
+	return valueFunc(func(ctx locale.FormatContext, formatter locale.Formatter) (string, []locale.FormatDiagnostic) {
+		return formatter.FormatPeriod(ctx, spec)
+	})
+}
+
+// RelativeOption configures explicit relative-time formatting.
+type RelativeOption func(*locale.RelativeSpec)
+
+// RelativeWidth sets long, short, or narrow relative-time width.
+func RelativeWidth(width locale.UnitWidth) RelativeOption {
+	return func(c *locale.RelativeSpec) { c.Width = width }
+}
+
+// RelativeNumeric controls whether named forms such as "yesterday" are allowed.
+func RelativeNumeric(mode locale.RelativeNumericMode) RelativeOption {
+	return func(c *locale.RelativeSpec) { c.Numeric = mode }
+}
+
+// Relative formats an explicit relative quantity.
+func Relative(n int64, unit locale.RelativeUnit, dir locale.RelativeDirection, opts ...RelativeOption) Value {
+	spec := locale.RelativeSpec{Value: n, Unit: unit, Direction: dir, Width: locale.UnitLong, Numeric: locale.RelativeAuto}
+	for _, opt := range opts {
+		opt(&spec)
+	}
+	return valueFunc(func(ctx locale.FormatContext, formatter locale.Formatter) (string, []locale.FormatDiagnostic) {
+		return formatter.FormatRelative(ctx, spec)
+	})
+}
+
+// RelativeTimeOption configures relative-time derivation from two instants.
+type RelativeTimeOption func(*locale.RelativeTimeSpec)
+
+// RelativeTimeWidth sets long, short, or narrow relative-time width.
+func RelativeTimeWidth(width locale.UnitWidth) RelativeTimeOption {
+	return func(c *locale.RelativeTimeSpec) { c.Width = width }
+}
+
+// RelativeTimeNumeric controls whether named forms such as "yesterday" are allowed.
+func RelativeTimeNumeric(mode locale.RelativeNumericMode) RelativeTimeOption {
+	return func(c *locale.RelativeTimeSpec) { c.Numeric = mode }
+}
+
+// RelativeTime formats target relative to reference.
+func RelativeTime(target, reference time.Time, opts ...RelativeTimeOption) Value {
+	spec := locale.RelativeTimeSpec{Target: target, Reference: reference, Width: locale.UnitLong, Numeric: locale.RelativeAuto}
+	for _, opt := range opts {
+		opt(&spec)
+	}
+	return valueFunc(func(ctx locale.FormatContext, formatter locale.Formatter) (string, []locale.FormatDiagnostic) {
+		return formatter.FormatRelativeTime(ctx, spec)
 	})
 }
 

@@ -102,10 +102,13 @@ func TestArabicRenderUsesProfileNumberingAndShowsDiagnostics(t *testing.T) {
 		now:      time.Date(2026, 5, 13, 15, 30, 0, 0, time.UTC),
 	}
 	screen := render(&model)
-	for _, want := range []string{"1,234.50", "16", "currency_symbol_unavailable(amount)"} {
+	for _, want := range []string{"1,234.50", "16", "ج.م."} {
 		if !strings.Contains(screen, want) {
 			t.Fatalf("Arabic render missing %q:\n%s", want, screen)
 		}
+	}
+	if strings.Contains(screen, "currency_symbol_unavailable") {
+		t.Fatalf("Arabic render reported obsolete currency diagnostic:\n%s", screen)
 	}
 	for _, notWant := range []string{"١٬٢٣٤٫٥٠", "١٦"} {
 		if strings.Contains(screen, notWant) {

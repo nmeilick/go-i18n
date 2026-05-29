@@ -41,7 +41,7 @@ type Services struct {
 }
 
 // NewServices composes bundles and constructs formatter/defaults services. If
-// no bundle is provided, the built-in lean bundle is used.
+// no bundle is provided, the built-in CLDR core bundle is used.
 func NewServices(bundles ...Bundle) (*Services, error) {
 	return NewServicesWithOptions(bundles)
 }
@@ -53,7 +53,7 @@ func NewServicesWithOptions(bundles []Bundle, opts ...ServiceOption) (*Services,
 		opt(&cfg)
 	}
 	if len(bundles) == 0 {
-		bundles = []Bundle{BuiltinLean()}
+		bundles = []Bundle{Builtin()}
 	}
 	bundle, err := Compose(bundles, cfg.compose...)
 	if err != nil {
@@ -83,6 +83,15 @@ func (s *Services) DefaultsProvider() locale.DefaultsProvider {
 		return svc.DefaultsProvider()
 	}
 	return s.defaults
+}
+
+// DisplayNames returns service-backed localized display-name helpers.
+func (s *Services) DisplayNames(profile locale.Profile) locale.DisplayNameSet {
+	if s == nil {
+		svc, _ := NewServices()
+		return svc.DisplayNames(profile)
+	}
+	return locale.NewDisplayNames(profile, toInternalProvider{p: s.data})
 }
 
 // Info returns composed bundle metadata.
@@ -199,6 +208,38 @@ func (f serviceFormatter) FormatDuration(ctx locale.FormatContext, spec locale.D
 	}
 	atomic.AddInt64(&f.services.stats.FormatterCalls, 1)
 	return f.next.FormatDuration(ctx, spec)
+}
+
+func (f serviceFormatter) FormatPeriod(ctx locale.FormatContext, spec locale.PeriodSpec) (string, []locale.FormatDiagnostic) {
+	if f.services.isClosed() {
+		return closedFormatDiagnostic("period")
+	}
+	atomic.AddInt64(&f.services.stats.FormatterCalls, 1)
+	return f.next.FormatPeriod(ctx, spec)
+}
+
+func (f serviceFormatter) FormatRelative(ctx locale.FormatContext, spec locale.RelativeSpec) (string, []locale.FormatDiagnostic) {
+	if f.services.isClosed() {
+		return closedFormatDiagnostic("relative_time")
+	}
+	atomic.AddInt64(&f.services.stats.FormatterCalls, 1)
+	return f.next.FormatRelative(ctx, spec)
+}
+
+func (f serviceFormatter) FormatRelativeTime(ctx locale.FormatContext, spec locale.RelativeTimeSpec) (string, []locale.FormatDiagnostic) {
+	if f.services.isClosed() {
+		return closedFormatDiagnostic("relative_time")
+	}
+	atomic.AddInt64(&f.services.stats.FormatterCalls, 1)
+	return f.next.FormatRelativeTime(ctx, spec)
+}
+
+func (f serviceFormatter) FormatDateTimeInterval(ctx locale.FormatContext, spec locale.DateTimeIntervalSpec) (string, []locale.FormatDiagnostic) {
+	if f.services.isClosed() {
+		return closedFormatDiagnostic("datetime_interval")
+	}
+	atomic.AddInt64(&f.services.stats.FormatterCalls, 1)
+	return f.next.FormatDateTimeInterval(ctx, spec)
 }
 
 func closedFormatDiagnostic(kind string) (string, []locale.FormatDiagnostic) {

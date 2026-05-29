@@ -27,7 +27,7 @@ type SelectionPlan struct {
 // PlanSelection expands all selectors and computes locale parent closure.
 func PlanSelection(bundle Bundle, selection Selection) (SelectionPlan, error) {
 	if bundle == nil {
-		bundle = BuiltinLean()
+		bundle = Builtin()
 	}
 	data := bundle.Data()
 	if data == nil {
@@ -51,7 +51,7 @@ func PlanSelection(bundle Bundle, selection Selection) (SelectionPlan, error) {
 // SelectBundle returns a bundle view limited to selected features and locales.
 func SelectBundle(bundle Bundle, selection Selection) (Bundle, SelectionPlan, error) {
 	if bundle == nil {
-		bundle = BuiltinLean()
+		bundle = Builtin()
 	}
 	plan, err := PlanSelection(bundle, selection)
 	if err != nil {
@@ -225,6 +225,9 @@ func (p selectedProvider) Locale(tag string) (LocaleRecord, bool) {
 		rec.WeekdaysWide = [7]string{}
 		rec.WeekdaysAbbr = [7]string{}
 	}
+	if !p.features[FeatureDatesGregorianDayPeriods] {
+		rec.DayPeriods = [2]string{}
+	}
 	if !p.features[FeatureCurrenciesFractions] && !p.features[FeatureCurrenciesSymbols] {
 		rec.CurrencyPattern = ""
 		rec.Accounting = ""
@@ -258,11 +261,78 @@ func (p selectedProvider) CurrencyFraction(code string) CurrencyFraction {
 	return p.base.CurrencyFraction(code)
 }
 
-func (p selectedProvider) CurrencySymbol(locale, code string) (string, bool) {
-	if !p.features[FeatureCurrenciesSymbols] {
+func (p selectedProvider) CurrencySymbol(locale, code string, display CurrencyDisplayMode) (string, bool) {
+	if display == CurrencyDisplayNarrowSymbol && !p.features[FeatureCurrenciesNarrowSymbols] {
 		return "", false
 	}
-	return p.base.CurrencySymbol(locale, code)
+	if display != CurrencyDisplayNarrowSymbol && !p.features[FeatureCurrenciesSymbols] {
+		return "", false
+	}
+	return p.base.CurrencySymbol(locale, code, display)
+}
+
+func (p selectedProvider) ListPattern(locale, typ, width string) (ListPattern, bool) {
+	if !p.features[FeatureListsPatterns] || !p.locales[CanonicalTag(locale)] {
+		return ListPattern{}, false
+	}
+	return p.base.ListPattern(locale, typ, width)
+}
+
+func (p selectedProvider) UnitPattern(locale, unit, width, category string) (string, bool) {
+	if !p.features[FeatureUnitsDurationCore] || !p.locales[CanonicalTag(locale)] {
+		return "", false
+	}
+	return p.base.UnitPattern(locale, unit, width, category)
+}
+
+func (p selectedProvider) CompactPattern(locale, width string, magnitude int64, category string) (string, bool) {
+	if !p.features[FeatureNumbersCompactDecimal] || !p.locales[CanonicalTag(locale)] {
+		return "", false
+	}
+	return p.base.CompactPattern(locale, width, magnitude, category)
+}
+
+func (p selectedProvider) RelativeTimePattern(locale, field, width, direction, category string) (string, bool) {
+	if !p.features[FeatureDatesRelativeTime] || !p.locales[CanonicalTag(locale)] {
+		return "", false
+	}
+	return p.base.RelativeTimePattern(locale, field, width, direction, category)
+}
+
+func (p selectedProvider) RelativeSpecial(locale, field, width string, offset int) (string, bool) {
+	if !p.features[FeatureDatesRelativeTime] || !p.locales[CanonicalTag(locale)] {
+		return "", false
+	}
+	return p.base.RelativeSpecial(locale, field, width, offset)
+}
+
+func (p selectedProvider) IntervalPattern(locale, skeleton, field string) (string, bool) {
+	if !p.features[FeatureDatesGregorianIntervals] || !p.locales[CanonicalTag(locale)] {
+		return "", false
+	}
+	return p.base.IntervalPattern(locale, skeleton, field)
+}
+
+func (p selectedProvider) DisplayName(locale, kind, code string) (string, bool) {
+	if !p.displayNameFeatureSelected(kind) || !p.locales[CanonicalTag(locale)] {
+		return "", false
+	}
+	return p.base.DisplayName(locale, kind, code)
+}
+
+func (p selectedProvider) displayNameFeatureSelected(kind string) bool {
+	switch kind {
+	case "language":
+		return p.features[FeatureDisplayNamesLanguages]
+	case "territory":
+		return p.features[FeatureDisplayNamesTerritories]
+	case "script":
+		return p.features[FeatureDisplayNamesScripts]
+	case "calendar":
+		return p.features[FeatureDisplayNamesCalendars]
+	default:
+		return false
+	}
 }
 
 func (p selectedProvider) BCP47Types(key string) []BCP47TypeRecord {
@@ -291,10 +361,63 @@ func (p selectedProvider) AvailableCurrencyFractions() []CurrencyFraction {
 }
 
 func (p selectedProvider) AvailableCurrencySymbols() []CurrencySymbolRecord {
-	if !p.features[FeatureCurrenciesSymbols] {
+	if !p.features[FeatureCurrenciesSymbols] && !p.features[FeatureCurrenciesNarrowSymbols] {
 		return nil
 	}
 	return p.base.AvailableCurrencySymbols()
+}
+
+func (p selectedProvider) AvailableListPatterns() []ListPatternRecord {
+	if !p.features[FeatureListsPatterns] {
+		return nil
+	}
+	return filterLocaleRecords(p.base.AvailableListPatterns(), p.locales, func(r ListPatternRecord) string { return r.Locale })
+}
+
+func (p selectedProvider) AvailableUnitPatterns() []UnitPatternRecord {
+	if !p.features[FeatureUnitsDurationCore] {
+		return nil
+	}
+	return filterLocaleRecords(p.base.AvailableUnitPatterns(), p.locales, func(r UnitPatternRecord) string { return r.Locale })
+}
+
+func (p selectedProvider) AvailableCompactPatterns() []CompactPatternRecord {
+	if !p.features[FeatureNumbersCompactDecimal] {
+		return nil
+	}
+	return filterLocaleRecords(p.base.AvailableCompactPatterns(), p.locales, func(r CompactPatternRecord) string { return r.Locale })
+}
+
+func (p selectedProvider) AvailableRelativeTimePatterns() []RelativePatternRecord {
+	if !p.features[FeatureDatesRelativeTime] {
+		return nil
+	}
+	return filterLocaleRecords(p.base.AvailableRelativeTimePatterns(), p.locales, func(r RelativePatternRecord) string { return r.Locale })
+}
+
+func (p selectedProvider) AvailableRelativeSpecials() []RelativeSpecialRecord {
+	if !p.features[FeatureDatesRelativeTime] {
+		return nil
+	}
+	return filterLocaleRecords(p.base.AvailableRelativeSpecials(), p.locales, func(r RelativeSpecialRecord) string { return r.Locale })
+}
+
+func (p selectedProvider) AvailableIntervalPatterns() []IntervalPatternRecord {
+	if !p.features[FeatureDatesGregorianIntervals] {
+		return nil
+	}
+	return filterLocaleRecords(p.base.AvailableIntervalPatterns(), p.locales, func(r IntervalPatternRecord) string { return r.Locale })
+}
+
+func (p selectedProvider) AvailableDisplayNames() []DisplayNameRecord {
+	all := p.base.AvailableDisplayNames()
+	out := make([]DisplayNameRecord, 0, len(all))
+	for _, rec := range all {
+		if p.locales[CanonicalTag(rec.Locale)] && p.displayNameFeatureSelected(rec.Kind) {
+			out = append(out, rec)
+		}
+	}
+	return out
 }
 
 func (p selectedProvider) AvailableBCP47Keys() []string {
@@ -302,4 +425,14 @@ func (p selectedProvider) AvailableBCP47Keys() []string {
 		return nil
 	}
 	return p.base.AvailableBCP47Keys()
+}
+
+func filterLocaleRecords[T any](records []T, locales map[string]bool, localeOf func(T) string) []T {
+	out := make([]T, 0, len(records))
+	for _, rec := range records {
+		if locales[CanonicalTag(localeOf(rec))] {
+			out = append(out, rec)
+		}
+	}
+	return out
 }

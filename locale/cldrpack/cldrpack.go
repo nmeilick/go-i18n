@@ -34,7 +34,7 @@ const (
 	sectionEntryLen = 32
 	chunkEntryLen   = 48
 	chunkHeaderLen  = 48
-	providerHdrLen  = 80
+	providerHdrLen  = providerStringPoolOff + providerStringPoolEntryLen
 
 	codecRaw  = 0
 	codecZstd = 1
@@ -183,7 +183,7 @@ func Build(bundle cldr.Bundle, opts ...BuildOption) ([]byte, error) {
 		opt(&cfg)
 	}
 	if bundle == nil {
-		bundle = cldr.BuiltinLean()
+		bundle = cldr.Builtin()
 	}
 	if bundle.Data() == nil {
 		return nil, fmt.Errorf("build cldrpack: bundle has no data provider")
@@ -500,8 +500,50 @@ func Validate(bundle cldr.Bundle) error {
 		}
 	}
 	for _, symbol := range data.AvailableCurrencySymbols() {
-		if _, ok := data.CurrencySymbol("", symbol.Code); !ok {
-			return fmt.Errorf("validate cldrpack: currency symbol %s is advertised but unavailable", symbol.Code)
+		if symbol.Symbol != "" {
+			if _, ok := data.CurrencySymbol(symbol.Locale, symbol.Code, cldr.CurrencyDisplaySymbol); !ok {
+				return fmt.Errorf("validate cldrpack: currency symbol %s/%s is advertised but unavailable", symbol.Locale, symbol.Code)
+			}
+		}
+		if symbol.Narrow != "" {
+			if _, ok := data.CurrencySymbol(symbol.Locale, symbol.Code, cldr.CurrencyDisplayNarrowSymbol); !ok {
+				return fmt.Errorf("validate cldrpack: narrow currency symbol %s/%s is advertised but unavailable", symbol.Locale, symbol.Code)
+			}
+		}
+	}
+	for _, rec := range data.AvailableListPatterns() {
+		if _, ok := data.ListPattern(rec.Locale, rec.Type, rec.Width); !ok {
+			return fmt.Errorf("validate cldrpack: list pattern %s/%s/%s is advertised but unavailable", rec.Locale, rec.Type, rec.Width)
+		}
+	}
+	for _, rec := range data.AvailableUnitPatterns() {
+		if _, ok := data.UnitPattern(rec.Locale, rec.Unit, rec.Width, rec.Category); !ok {
+			return fmt.Errorf("validate cldrpack: unit pattern %s/%s/%s/%s is advertised but unavailable", rec.Locale, rec.Unit, rec.Width, rec.Category)
+		}
+	}
+	for _, rec := range data.AvailableCompactPatterns() {
+		if _, ok := data.CompactPattern(rec.Locale, rec.Width, rec.Magnitude, rec.Category); !ok {
+			return fmt.Errorf("validate cldrpack: compact pattern %s/%s/%d/%s is advertised but unavailable", rec.Locale, rec.Width, rec.Magnitude, rec.Category)
+		}
+	}
+	for _, rec := range data.AvailableRelativeTimePatterns() {
+		if _, ok := data.RelativeTimePattern(rec.Locale, rec.Field, rec.Width, rec.Direction, rec.Category); !ok {
+			return fmt.Errorf("validate cldrpack: relative pattern %s/%s/%s/%s/%s is advertised but unavailable", rec.Locale, rec.Field, rec.Width, rec.Direction, rec.Category)
+		}
+	}
+	for _, rec := range data.AvailableRelativeSpecials() {
+		if _, ok := data.RelativeSpecial(rec.Locale, rec.Field, rec.Width, rec.Offset); !ok {
+			return fmt.Errorf("validate cldrpack: relative special %s/%s/%s/%d is advertised but unavailable", rec.Locale, rec.Field, rec.Width, rec.Offset)
+		}
+	}
+	for _, rec := range data.AvailableIntervalPatterns() {
+		if _, ok := data.IntervalPattern(rec.Locale, rec.Skeleton, rec.Field); !ok {
+			return fmt.Errorf("validate cldrpack: interval pattern %s/%s/%s is advertised but unavailable", rec.Locale, rec.Skeleton, rec.Field)
+		}
+	}
+	for _, rec := range data.AvailableDisplayNames() {
+		if _, ok := data.DisplayName(rec.Locale, rec.Kind, rec.Code); !ok {
+			return fmt.Errorf("validate cldrpack: display name %s/%s/%s is advertised but unavailable", rec.Locale, rec.Kind, rec.Code)
 		}
 	}
 	for _, key := range data.AvailableBCP47Keys() {
@@ -1141,11 +1183,16 @@ func (p *packProvider) CurrencyFraction(code string) cldr.CurrencyFraction {
 	return rec
 }
 
-func (p *packProvider) CurrencySymbol(locale, code string) (string, bool) {
+func (p *packProvider) CurrencySymbol(locale, code string, display cldr.CurrencyDisplayMode) (string, bool) {
 	code = strings.ToUpper(strings.TrimSpace(code))
+	if display == cldr.CurrencyDisplayCode {
+		return code, code != ""
+	}
+	locale = cldr.CanonicalTag(locale)
+	key := locale + "\x00" + code + "\x00" + string(display)
 	p.cacheMu.RLock()
 	if p.symbolCache != nil {
-		if sym, ok := p.symbolCache[code]; ok {
+		if sym, ok := p.symbolCache[key]; ok {
 			p.cacheMu.RUnlock()
 			return sym, true
 		}
@@ -1154,7 +1201,9 @@ func (p *packProvider) CurrencySymbol(locale, code string) (string, bool) {
 	if err := p.load(); err != nil {
 		return "", false
 	}
-	sym, ok := p.data.symbol(code)
+	sym, ok := p.lookupStringByLocale(locale, func(cur string) (string, bool) {
+		return p.data.symbol(cur, code, display)
+	})
 	if !ok {
 		return "", false
 	}
@@ -1163,11 +1212,74 @@ func (p *packProvider) CurrencySymbol(locale, code string) (string, bool) {
 		if p.symbolCache == nil {
 			p.symbolCache = map[string]string{}
 		}
-		p.symbolCache[code] = sym
+		p.symbolCache[key] = sym
 		p.cacheEntries++
 	}
 	p.cacheMu.Unlock()
 	return sym, true
+}
+
+func (p *packProvider) ListPattern(locale, typ, width string) (cldr.ListPattern, bool) {
+	if err := p.load(); err != nil {
+		return cldr.ListPattern{}, false
+	}
+	return p.lookupListPatternByLocale(locale, func(cur string) (cldr.ListPattern, bool) {
+		return p.data.listPattern(cur, typ, width)
+	})
+}
+
+func (p *packProvider) UnitPattern(locale, unit, width, category string) (string, bool) {
+	if err := p.load(); err != nil {
+		return "", false
+	}
+	return p.lookupStringByLocale(locale, func(cur string) (string, bool) {
+		return p.data.unitPattern(cur, unit, width, category)
+	})
+}
+
+func (p *packProvider) CompactPattern(locale, width string, magnitude int64, category string) (string, bool) {
+	if err := p.load(); err != nil {
+		return "", false
+	}
+	return p.lookupStringByLocale(locale, func(cur string) (string, bool) {
+		return p.data.compactPattern(cur, width, magnitude, category)
+	})
+}
+
+func (p *packProvider) RelativeTimePattern(locale, field, width, direction, category string) (string, bool) {
+	if err := p.load(); err != nil {
+		return "", false
+	}
+	return p.lookupStringByLocale(locale, func(cur string) (string, bool) {
+		return p.data.relativePattern(cur, field, width, direction, category)
+	})
+}
+
+func (p *packProvider) RelativeSpecial(locale, field, width string, offset int) (string, bool) {
+	if err := p.load(); err != nil {
+		return "", false
+	}
+	return p.lookupStringByLocale(locale, func(cur string) (string, bool) {
+		return p.data.relativeSpecial(cur, field, width, offset)
+	})
+}
+
+func (p *packProvider) IntervalPattern(locale, skeleton, field string) (string, bool) {
+	if err := p.load(); err != nil {
+		return "", false
+	}
+	return p.lookupStringByLocale(locale, func(cur string) (string, bool) {
+		return p.data.intervalPattern(cur, skeleton, field)
+	})
+}
+
+func (p *packProvider) DisplayName(locale, kind, code string) (string, bool) {
+	if err := p.load(); err != nil {
+		return "", false
+	}
+	return p.lookupStringByLocale(locale, func(cur string) (string, bool) {
+		return p.data.displayName(cur, kind, code)
+	})
 }
 
 func (p *packProvider) BCP47Types(key string) []cldr.BCP47TypeRecord {
@@ -1194,6 +1306,47 @@ func (p *packProvider) BCP47Types(key string) []cldr.BCP47TypeRecord {
 	}
 	p.cacheMu.Unlock()
 	return recs
+}
+
+func (p *packProvider) lookupStringByLocale(locale string, lookup func(string) (string, bool)) (string, bool) {
+	for cur := cldr.CanonicalTag(locale); cur != ""; {
+		if value, ok := lookup(cur); ok && value != "" {
+			return value, true
+		}
+		parent, ok := p.Parent(cur)
+		if !ok || parent == cur {
+			parent = packParentTag(cur)
+		}
+		if parent == "" || parent == cur {
+			break
+		}
+		cur = parent
+	}
+	return lookup("en")
+}
+
+func (p *packProvider) lookupListPatternByLocale(locale string, lookup func(string) (cldr.ListPattern, bool)) (cldr.ListPattern, bool) {
+	for cur := cldr.CanonicalTag(locale); cur != ""; {
+		if value, ok := lookup(cur); ok {
+			return value, true
+		}
+		parent, ok := p.Parent(cur)
+		if !ok || parent == cur {
+			parent = packParentTag(cur)
+		}
+		if parent == "" || parent == cur {
+			break
+		}
+		cur = parent
+	}
+	return lookup("en")
+}
+
+func packParentTag(tag string) string {
+	if i := strings.LastIndex(tag, "-"); i > 0 {
+		return tag[:i]
+	}
+	return ""
 }
 
 func (p *packProvider) canCacheLocked() bool {
@@ -1227,6 +1380,55 @@ func (p *packProvider) AvailableCurrencySymbols() []cldr.CurrencySymbolRecord {
 		return nil
 	}
 	return p.data.symbols()
+}
+
+func (p *packProvider) AvailableListPatterns() []cldr.ListPatternRecord {
+	if err := p.load(); err != nil {
+		return nil
+	}
+	return p.data.listPatterns()
+}
+
+func (p *packProvider) AvailableUnitPatterns() []cldr.UnitPatternRecord {
+	if err := p.load(); err != nil {
+		return nil
+	}
+	return p.data.unitPatterns()
+}
+
+func (p *packProvider) AvailableCompactPatterns() []cldr.CompactPatternRecord {
+	if err := p.load(); err != nil {
+		return nil
+	}
+	return p.data.compactPatterns()
+}
+
+func (p *packProvider) AvailableRelativeTimePatterns() []cldr.RelativePatternRecord {
+	if err := p.load(); err != nil {
+		return nil
+	}
+	return p.data.relativePatterns()
+}
+
+func (p *packProvider) AvailableRelativeSpecials() []cldr.RelativeSpecialRecord {
+	if err := p.load(); err != nil {
+		return nil
+	}
+	return p.data.relativeSpecials()
+}
+
+func (p *packProvider) AvailableIntervalPatterns() []cldr.IntervalPatternRecord {
+	if err := p.load(); err != nil {
+		return nil
+	}
+	return p.data.intervalPatterns()
+}
+
+func (p *packProvider) AvailableDisplayNames() []cldr.DisplayNameRecord {
+	if err := p.load(); err != nil {
+		return nil
+	}
+	return p.data.displayNames()
 }
 
 func (p *packProvider) AvailableBCP47Keys() []string {

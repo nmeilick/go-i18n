@@ -28,8 +28,13 @@ func TestDefaultProviderSwissData(t *testing.T) {
 	if fraction := p.CurrencyFraction("JPY"); fraction.Digits != 0 {
 		t.Fatalf("JPY fraction = %#v", fraction)
 	}
-	if sym, ok := p.CurrencySymbol("de-CH", "CHF"); !ok || sym == "" {
-		t.Fatalf("CHF symbol = %q ok=%v", sym, ok)
+	for code, want := range map[string]string{"CHF": "CHF", "KRW": "₩", "THB": "฿"} {
+		if sym, ok := p.CurrencySymbol("de-CH", code, CurrencyDisplaySymbol); !ok || sym != want {
+			t.Fatalf("%s symbol = %q ok=%v, want %q", code, sym, ok, want)
+		}
+	}
+	if sym, ok := p.CurrencySymbol("de-CH", "CHF", CurrencyDisplayCode); !ok || sym != "CHF" {
+		t.Fatalf("code display = %q ok=%v", sym, ok)
 	}
 	if types := p.BCP47Types("nu"); len(types) == 0 {
 		t.Fatal("numbering-system BCP-47 types missing")

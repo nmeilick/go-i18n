@@ -32,25 +32,50 @@ func TestCLDRFormatterCurrencyDateListAndUnit(t *testing.T) {
 		t.Fatalf("date = %q", date)
 	}
 	list, ds := f.FormatList(ctx, ListSpec{Items: []string{"A", "B", "C"}, Type: ListStandard, Width: "long"})
-	if !hasFormatDiagnostic(ds, "unsupported_list_patterns") {
-		t.Fatalf("list diagnostics = %#v, want fallback diagnostic", ds)
+	if len(ds) != 0 {
+		t.Fatalf("list diagnostics = %#v", ds)
 	}
 	if list != "A, B und C" {
 		t.Fatalf("list = %q", list)
 	}
 	unit, ds := f.FormatUnit(ctx, UnitSpec{Value: 2, Unit: "length-meter", Width: UnitLong})
-	if !hasFormatDiagnostic(ds, "unsupported_unit") {
+	if !hasFormatDiagnostic(ds, "unit_unavailable") {
 		t.Fatalf("unit diagnostics = %#v, want fallback diagnostic", ds)
 	}
 	if unit != "2 length-meter" {
 		t.Fatalf("unit = %q", unit)
 	}
 	compact, ds := f.FormatNumber(ctx, NumberSpec{Value: 1200000, Kind: NumberCompact})
-	if !hasFormatDiagnostic(ds, "unsupported_compact_number") {
-		t.Fatalf("compact diagnostics = %#v, want fallback diagnostic", ds)
+	if len(ds) != 0 {
+		t.Fatalf("compact diagnostics = %#v", ds)
 	}
-	if !strings.Contains(compact, "1’200’000") {
+	if compact == "" || strings.Contains(compact, "1’200’000") {
 		t.Fatalf("compact = %q", compact)
+	}
+}
+
+func TestCLDRFormatterCommonAsianCurrencySymbols(t *testing.T) {
+	f := DefaultFormatter()
+	for _, tc := range []struct {
+		tag    string
+		code   CurrencyCode
+		symbol string
+	}{
+		{tag: "ko-KR", code: Currency("KRW"), symbol: "₩"},
+		{tag: "th-TH", code: Currency("THB"), symbol: "฿"},
+	} {
+		p, err := NewProfile([]string{tc.tag}, WithCurrency(tc.code))
+		if err != nil {
+			t.Fatal(err)
+		}
+		ctx := FormatContext{Profile: p, Locale: language.MustParse(tc.tag), Policy: DefaultFormatPolicy()}
+		amount, ds := f.FormatCurrency(ctx, CurrencySpec{Value: 1234.5, Code: tc.code, CodeSource: CurrencyExplicit})
+		if hasFormatDiagnostic(ds, "currency_symbol_unavailable") {
+			t.Fatalf("%s diagnostics = %#v", tc.tag, ds)
+		}
+		if !strings.Contains(amount, tc.symbol) {
+			t.Fatalf("%s currency = %q, want symbol %q", tc.tag, amount, tc.symbol)
+		}
 	}
 }
 
@@ -67,13 +92,13 @@ func TestCLDRFormatterStrictFailures(t *testing.T) {
 	if text, ds := f.FormatDateTime(ctx, DateTimeSpec{Value: time.Now(), Kind: DateOnly, Calendar: "buddhist"}); text != "" || len(ds) == 0 || ds[0].Code != "unsupported_calendar" {
 		t.Fatalf("strict calendar = %q %#v", text, ds)
 	}
-	if text, ds := f.FormatNumber(ctx, NumberSpec{Value: 1200, Kind: NumberCompact}); text != "" || len(ds) == 0 || ds[0].Code != "unsupported_compact_number" {
+	if text, ds := f.FormatNumber(ctx, NumberSpec{Value: 1200, Kind: NumberCompact}); text == "" || len(ds) != 0 {
 		t.Fatalf("strict compact = %q %#v", text, ds)
 	}
-	if text, ds := f.FormatUnit(ctx, UnitSpec{Value: 2, Unit: "length-meter"}); text != "" || len(ds) == 0 || ds[0].Code != "unsupported_unit" {
+	if text, ds := f.FormatUnit(ctx, UnitSpec{Value: 2, Unit: "length-meter"}); text != "" || len(ds) == 0 || ds[0].Code != "unit_unavailable" {
 		t.Fatalf("strict unit = %q %#v", text, ds)
 	}
-	if text, ds := f.FormatDuration(ctx, DurationSpec{Value: time.Hour}); text != "" || len(ds) == 0 || ds[0].Code != "unsupported_unit" {
+	if text, ds := f.FormatDuration(ctx, DurationSpec{Value: time.Hour}); text == "" || len(ds) != 0 {
 		t.Fatalf("strict duration = %q %#v", text, ds)
 	}
 }
@@ -94,7 +119,7 @@ func TestCLDRFormatterNegativeCurrencyFallbackKeepsNumber(t *testing.T) {
 	}
 }
 
-func TestCLDRFormatterLenientDurationReportsFallbacks(t *testing.T) {
+func TestCLDRFormatterFormatsDurationWithCLDRPatterns(t *testing.T) {
 	f := DefaultFormatter()
 	p, err := NewProfile([]string{"en"})
 	if err != nil {
@@ -103,12 +128,74 @@ func TestCLDRFormatterLenientDurationReportsFallbacks(t *testing.T) {
 	ctx := FormatContext{Profile: p, Locale: language.English, Policy: DefaultFormatPolicy()}
 	text, ds := f.FormatDuration(ctx, DurationSpec{Value: 90 * time.Minute})
 	if text == "" {
-		t.Fatal("duration fallback returned empty text")
+		t.Fatal("duration returned empty text")
 	}
-	for _, code := range []string{"unsupported_unit", "unsupported_list_patterns", "unsupported_duration_units"} {
-		if !hasFormatDiagnostic(ds, code) {
-			t.Fatalf("duration diagnostics = %#v, want %s", ds, code)
-		}
+	if len(ds) != 0 {
+		t.Fatalf("duration diagnostics = %#v", ds)
+	}
+	if !strings.Contains(text, "hour") || !strings.Contains(text, "minute") {
+		t.Fatalf("duration = %q", text)
+	}
+}
+
+func TestCLDRFormatterPeriodRelativeTimeIntervalAndDisplayNames(t *testing.T) {
+	f := DefaultFormatter()
+	p, err := NewProfile([]string{"en-US"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := FormatContext{Profile: p, Locale: language.English, Policy: DefaultFormatPolicy()}
+
+	period, ds := f.FormatPeriod(ctx, PeriodSpec{Value: Period{Years: 1, Months: 2, Days: 3}, Width: UnitLong})
+	if len(ds) != 0 {
+		t.Fatalf("period diagnostics = %#v", ds)
+	}
+	if period != "1 year, 2 months, 3 days" {
+		t.Fatalf("period = %q", period)
+	}
+
+	ref := time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC)
+	relative, ds := f.FormatRelativeTime(ctx, RelativeTimeSpec{
+		Target:    ref.AddDate(0, 0, -1),
+		Reference: ref,
+		Width:     UnitLong,
+		Numeric:   RelativeAuto,
+	})
+	if len(ds) != 0 {
+		t.Fatalf("relative diagnostics = %#v", ds)
+	}
+	if relative != "yesterday" {
+		t.Fatalf("relative = %q", relative)
+	}
+
+	interval, ds := f.FormatDateTimeInterval(ctx, DateTimeIntervalSpec{
+		Start: ref,
+		End:   ref.AddDate(0, 0, 2),
+		Kind:  DateOnly,
+		Width: "medium",
+	})
+	if len(ds) != 0 {
+		t.Fatalf("interval diagnostics = %#v", ds)
+	}
+	if interval != "May 16–18, 2026" {
+		t.Fatalf("interval = %q", interval)
+	}
+
+	names := DisplayNames(p)
+	if got := names.Language("fr"); got != "French" {
+		t.Fatalf("language name = %q", got)
+	}
+	if got := names.Region("CH"); got != "Switzerland" {
+		t.Fatalf("region name = %q", got)
+	}
+	if got := names.Script("Latn"); got != "Latin" {
+		t.Fatalf("script name = %q", got)
+	}
+	if got := names.Calendar("gregorian"); got != "Gregorian Calendar" {
+		t.Fatalf("calendar name = %q", got)
+	}
+	if res := names.LookupLanguage("zzzz"); res.Text != "zzzz" || !hasFormatDiagnostic(res.Diagnostics, "display_name_unavailable") {
+		t.Fatalf("missing display name = %#v", res)
 	}
 }
 
@@ -122,10 +209,10 @@ func TestCLDRFormatterUsesProfileNumberingSystemForArabic(t *testing.T) {
 	}
 	latnCtx := FormatContext{Profile: latn, Locale: language.MustParse("ar"), Policy: DefaultFormatPolicy()}
 	amount, ds := f.FormatCurrency(latnCtx, CurrencySpec{Value: 1234.5, Code: Currency("EGP"), CodeSource: CurrencyExplicit})
-	if !hasFormatDiagnostic(ds, "currency_symbol_unavailable") {
-		t.Fatalf("currency diagnostics = %#v, want symbol fallback", ds)
+	if len(ds) != 0 {
+		t.Fatalf("currency diagnostics = %#v", ds)
 	}
-	if !strings.Contains(amount, "1,234.50") || strings.Contains(amount, "١") {
+	if !strings.Contains(amount, "1,234.50") || !strings.Contains(amount, "ج.م.") || strings.Contains(amount, "١") {
 		t.Fatalf("latn amount = %q", amount)
 	}
 	date, ds := f.FormatDateTime(latnCtx, DateTimeSpec{Value: tm, Kind: DateOnly, Width: "medium"})
@@ -169,14 +256,14 @@ func TestCLDRFormatterObserverReceivesFallbackDiagnostics(t *testing.T) {
 		ObserveContext: observe.WithAttrs(context.Background(), observe.Bounded("route", "job")),
 	}
 	_, ds := f.FormatUnit(ctx, UnitSpec{Value: 2, Unit: "length-meter", Width: UnitLong})
-	if !hasFormatDiagnostic(ds, "unsupported_unit") {
+	if !hasFormatDiagnostic(ds, "unit_unavailable") {
 		t.Fatalf("format diagnostics = %#v", ds)
 	}
 	events := collector.Events()
 	if len(events) != 1 {
 		t.Fatalf("events = %#v", events)
 	}
-	if events[0].Name != "locale.format" || events[0].Code != "unsupported_unit" {
+	if events[0].Name != "locale.format" || events[0].Code != "unit_unavailable" {
 		t.Fatalf("event = %#v", events[0])
 	}
 	if got := attrValue(events[0].Attrs, "route"); got != "job" {
@@ -185,11 +272,11 @@ func TestCLDRFormatterObserverReceivesFallbackDiagnostics(t *testing.T) {
 
 	collector.Reset()
 	_, ds = f.FormatDuration(ctx, DurationSpec{Value: 90 * time.Minute})
-	if !hasFormatDiagnostic(ds, "unsupported_duration_units") {
+	if len(ds) != 0 {
 		t.Fatalf("duration diagnostics = %#v", ds)
 	}
 	events = collector.Events()
-	if len(events) != 1 || events[0].Code != "unsupported_duration_units" {
+	if len(events) != 0 {
 		t.Fatalf("duration events = %#v", events)
 	}
 }
